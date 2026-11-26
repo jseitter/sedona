@@ -210,8 +210,12 @@ class SoxSession
     authTempOut.writeI8(nonce)     
     Crypto.sha1(authTemp.bytes, 0, authTemp.size, authDigest, 0)
     
-    // verify if digests are equal                        
-    if (Sys.compareBytes(authDigest, 0, digest, digestOff, digestLen) != 0) return false
+    // verify if digests are equal; look at every byte, so that the
+    // time this takes says nothing about where the digests differ
+    int diff = 0
+    for (int i=0; i<digestLen; ++i)
+      diff |= authDigest[i] ^ digest[digestOff+i]
+    if (diff != 0) return false
     user = u
     return true
   }                 
