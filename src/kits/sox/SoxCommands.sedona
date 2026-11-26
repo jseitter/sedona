@@ -1096,6 +1096,9 @@ class SoxCommands
     if (chunkSize + 18 >= Dasp.ABS_MAX_VAL)
       chunkSize = Dasp.ABS_MAX_VAL - 18
 
+    // the sizes are used to divide and to count chunks
+    if (chunkSize <= 0 || fileSize < 0) { res.error("bad size"); return }
+
     // check for file too big (max chunkNum won't fit into 2 bytes)
     if (fileSize >= chunkSize * 0xffff) { res.error("too big"); return }
 
@@ -1284,6 +1287,14 @@ class SoxCommands
     BufInStream in = service.in
     int chunkNum   = in.readU2()
     int chunkSize  = in.readU2()
+
+    // the chunk must be part of the received message, and
+    // must lie inside the file as it was announced on open
+    if (chunkNum < 0 || chunkSize < 0) return
+    if (chunkSize > service.packet.size - in.pos) return
+    if (chunkSize > tx.chunkSize) return
+    if (chunkNum * tx.chunkSize + chunkSize > tx.fileSize) return
+    if (tx.numChunks == 0) return
 
     // write file
     tx.file.seek(tx.offset + (chunkNum * tx.chunkSize))
