@@ -83,10 +83,11 @@ class SoxSession
     
     // make sure we don't have any other open sessions to the 
     // same client IP address with same session id - that can 
-    // happen if we drop a challenge packet
+    // happen if we drop a challenge packet; a session which has
+    // logged in is not given up for a hello anyone could send
     foreach (SoxSession s : service.sessions, Watch.max)
     {
-      if (s != this &&
+      if (s != this && !s.closed && !s.authenticated &&
           s.remoteId == this.remoteId &&
           s.addr.equals(this.addr))
       {
