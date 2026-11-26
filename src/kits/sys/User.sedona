@@ -82,9 +82,26 @@ class User
   **
   bool canProv(Str uri)
   {                
-    if (uri.startsWith("app."))  return (prov & provApp)  != 0
-    if (uri.startsWith("kits.")) return (prov & provKits) != 0
-    if (uri.startsWith("svm"))   return (prov & provSvm)  != 0
+    if (hasPrefix(uri, "app."))  return (prov & provApp)  != 0
+    if (hasPrefix(uri, "kits.")) return (prov & provKits) != 0
+    if (hasPrefix(uri, "svm"))   return (prov & provSvm)  != 0
+    return true
+  }
+
+  **
+  ** Return if the uri starts with the lower case prefix, ignoring
+  ** the case of the uri: on a file system which ignores case
+  ** "APP.SAB" is the same file as "app.sab".
+  **
+  private static bool hasPrefix(Str uri, Str prefix)
+  {
+    int len = prefix.length()
+    for (int i=0; i<len; ++i)
+    {
+      int ch = uri.get(i)
+      if ('A' <= ch && ch <= 'Z') ch += 'a' - 'A'
+      if (ch != prefix.get(i)) return false
+    }
     return true
   }
   

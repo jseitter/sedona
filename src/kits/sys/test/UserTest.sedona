@@ -51,6 +51,36 @@ class UserTest
     verifyHas(0x0a, (oi<<24)|((or|ow)<<8), ar, false)
   }           
   
+  static void testCanProv()
+  {
+    u.prov := 0
+    assert(!u.canProv("app.sab"))
+    assert(!u.canProv("app.sab.writing"))
+    assert(!u.canProv("kits.scode"))
+    assert(!u.canProv("svm"))
+    assert(!u.canProv("svm.exe"))
+    assert(u.canProv("blob.txt"))
+    assert(u.canProv("ap"))
+    assert(u.canProv(""))
+
+    // the case of the name doesn't matter
+    assert(!u.canProv("APP.SAB"))
+    assert(!u.canProv("App.sab"))
+    assert(!u.canProv("Kits.Scode"))
+    assert(!u.canProv("SVM"))
+
+    u.prov := User.provApp
+    assert(u.canProv("app.sab"))
+    assert(u.canProv("APP.sab"))
+    assert(!u.canProv("kits.scode"))
+    assert(!u.canProv("svm"))
+
+    u.prov := User.provKits | User.provSvm
+    assert(!u.canProv("app.sab"))
+    assert(u.canProv("KITS.scode"))
+    assert(u.canProv("svm"))
+  }
+
   static void verifyHas(int groups, int perm, int has, bool result)
   {                                   
     // Sys.out.print("verifyHas 0x" + Sys.hexStr(groups) + "  0x" + Sys.hexStr(perm) + "  0x" + Sys.hexStr(has)).nl()  
