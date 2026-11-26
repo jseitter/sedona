@@ -1070,6 +1070,11 @@ class SoxCommands
     int fileSize   = in.readS4()
     int chunkSize  = in.readU2()
 
+    if (method == null || uri == null) { res.error("bad request"); return }
+
+    // only files below the directory of the device
+    if (!isLocalPath(uri)) { res.error("bad uri"); return }
+
     // check permissions
     if (!session.user.canProv(uri)) { res.error("denied"); return }
 
@@ -1176,6 +1181,44 @@ class SoxCommands
     out.writeI4(tx.fileSize)
     out.writeI2(tx.chunkSize)
     out.write(0)
+  }
+
+  **
+  ** Return if the name of a file from a request stays below the
+  ** directory the device keeps its files in.  The name must be
+  ** relative and must not contain a "." or ".." segment, so that a
+  ** file has exactly one name: both escaping the directory and
+  ** reaching a protected file under another name are ruled out.
+  ** A ':' is only allowed for a scheme one of the file stores
+  ** handles, such as "m:" for manifests.
+  **
+  static bool isLocalPath(Str uri)
+  {
+    int len = uri.length()
+    if (len == 0) return false
+
+    int segStart = 0
+    for (int i=0; i<=len; ++i)
+    {
+      int ch = i < len ? uri.get(i) : '/'
+      if (ch == 0x5c) return false       // backslash
+      if (ch == ':')
+      {
+        if (segStart != 0) return false
+        if (FileStore.lookup(uri) == FileStore.sys) return false
+        segStart = i+1
+        continue
+      }
+      if (ch != '/') continue
+
+      // end of a segment
+      int segLen = i - segStart
+      if (segLen == 0 && i < len) return false   // absolute or "//"
+      if (segLen == 1 && uri.get(segStart) == '.') return false
+      if (segLen == 2 && uri.get(segStart) == '.' && uri.get(segStart+1) == '.') return false
+      segStart = i+1
+    }
+    return true
   }
 
 ////////////////////////////////////////////////////////////////
@@ -1300,6 +1343,7 @@ class SoxCommands
     Str from = in.readStrInPlace(tempStr1)
     Str to   = in.readStrInPlace(tempStr2)
     if (from == null || to == null) { res.error("bad name"); return }
+    if (!isLocalPath(from) || !isLocalPath(to)) { res.error("bad name"); return }
 
     // check permissions - a rename removes one file and replaces
     // another, so the user needs to be allowed to provision both
