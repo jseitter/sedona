@@ -73,7 +73,7 @@ internal class Handler
     if (left < 5) { socket.close(); return true }
 
     // read request bytes
-    int read = socket.read(buf, pos, bufLen)
+    int read = socket.read(buf, pos, left)
 
     if (read == 0) // no data available yet (nonblocking)
       return true
