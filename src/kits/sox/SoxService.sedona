@@ -251,11 +251,18 @@ class SoxService
     int numFields = msgType & 0xf
     msgType       = (msgType >> 4) & 0xf
 
+    // discovery is answered without a session
+    if (msgType == Dasp.DISCOVER)
+    {
+      discoverResponse()
+      return
+    }
+
     // if hello try to allocate new session, right
     // now we just ignore the hello when busy instead
     // of sending back proper busy error
     SoxSession session = null
-    if ( (msgType == Dasp.HELLO) || (msgType == Dasp.DISCOVER) )
+    if (msgType == Dasp.HELLO)
       session = openSession()
     else
       session = session(sessionId)
@@ -286,10 +293,6 @@ class SoxService
       case Dasp.CLOSE:
         closeSession(session, "Recd cmd");
         return
-      case Dasp.DISCOVER:
-        session.discoverResponse(this);
-        closeSession(session, "Discovered");
-        return
     }
 
     // everything else is only for sessions which have completed
@@ -310,6 +313,25 @@ class SoxService
       if (session.receiveWindow.receive(seqNum))
         SoxCommands.process(this, session)
     }
+  }
+
+  **
+  ** Send a discovery response to the source of the message just
+  ** received.  This must not take up a session: anyone can send a
+  ** discover, and there are only a few sessions.
+  **
+  private void discoverResponse()
+  {
+    packet.clear()
+    out.writeI2(0xffff)
+    out.writeI2(0xffff)
+    out.write(Dasp.DISCOVER << 4 | 1)   // one header
+    out.write(Dasp.PLATFORM_ID << 2 | Dasp.STR)
+    out.writeStr(Sys.app.platform.platformId.toStr())
+
+    // the datagram still has the address and port of the request
+    datagram.len = packet.size
+    socket.send(datagram)
   }
 
 ////////////////////////////////////////////////////////////////
