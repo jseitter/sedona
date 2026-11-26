@@ -29,6 +29,7 @@ class SoxSession
     transfer.reset()
     user = null
     authenticated = false
+    challenged = false
   }
 
 ////////////////////////////////////////////////////////////////
@@ -94,6 +95,8 @@ class SoxSession
     // (mask the low half, a negative int would set all the high bits)
     nonce = (long)Sys.rand() << 32 | ((long)Sys.rand() & 0xffff_ffffL)
     
+    challenged = true
+
     // send back challenge
     OutStream out = prepare(service, Dasp.CHALLENGE, sendWindow.seqNum)
     out.write(Dasp.REMOTE_ID << 2 | Dasp.U2);    
@@ -110,6 +113,9 @@ class SoxSession
   **
   void welcome(SoxService service, int numFields)
   {         
+    // only as the answer to a challenge
+    if (!challenged && !authenticated) return
+
     // authenticate fields     
     Str username  = null
     int digestLen = 0    
@@ -144,14 +150,28 @@ class SoxSession
     if (digestLen != 20 || username == null) return 
     if (digestOff + digestLen > in.buf.size) return
     
-    // authenticate
-    authenticated = false
-    if (!authenticate(service, username, digest, digestOff, digestLen))
-    {    
-      close(service, Dasp.NOT_AUTHENTICATED)
-      return
-    }  
-    authenticated = true
+    if (authenticated)
+    {
+      // the client repeats its authenticate if our welcome got lost;
+      // send the welcome again for the very same message, and leave
+      // the session alone for anything else
+      User current = user
+      bool same = authenticate(service, username, digest, digestOff, digestLen) && user == current
+      user = current
+      if (!same) return
+    }
+    else
+    {
+      // authenticate - a challenge is good for one attempt
+      challenged = false
+      if (!authenticate(service, username, digest, digestOff, digestLen))
+      {
+        SoxService.log.warning("login failed from ${addr.addr.toStr()}")
+        close(service, Dasp.NOT_AUTHENTICATED)
+        return
+      }
+      authenticated = true
+    }
                         
     // send back welcome - use the defaults for
     // absMax, receiveMax, and receiveTimeout
@@ -350,6 +370,7 @@ class SoxSession
   long nonce                         // Nonce used for authentication
   User user                          // Authenticated user for session
   bool authenticated                 // Has the handshake been completed
+  bool challenged                    // Is a challenge waiting for its answer
   inline ReceiveWindow receiveWindow // Sliding window for incoming messages 
   inline SendWindow sendWindow       // Sliding window for outgoing messages 
   inline FileTransfer transfer       // File transfer state  
