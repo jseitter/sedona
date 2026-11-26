@@ -55,7 +55,7 @@ To get a result for every single test, run a suite through `testreport.py`. It w
 ```
 Use `scode/unix64-test.scode` for a 64-bit VM, which is what `makedev.py` builds on macOS and on ARM64 Linux.
 
-GitHub Actions runs the same steps for every push and pull request, see [ci.yml](.github/workflows/ci.yml): a 32-bit VM on x86-64 Linux, and a 64-bit VM on x86-64 Linux, ARM64 Linux and macOS. The summary page of a run lists the results, and the logs and JUnit files are attached to it as artifacts.
+GitHub Actions runs the same steps for every push and pull request, see [ci.yml](.github/workflows/ci.yml): a 32-bit VM on x86-64 Linux, and a 64-bit VM on x86-64 Linux and ARM64 Linux. macOS is not run there: two timing tests (`func::FreqTest` and `sys::SysTest.testTime`) fail on the hosted macOS runners, whose sleeps run long. The summary page of a run lists the results, and the logs and JUnit files are attached to it as artifacts.
 
 ## Contribution
 Contribution is always welcomed!  If you want to contribute(add new feature, fix bugs etc), please create an issue first so that if others are interested, related discussion can happen there. At last, please avoid sending huge pull request.
