@@ -141,6 +141,7 @@ class SoxSession
 
     // bad authenticate headers
     if (digestLen != 20 || username == null) return 
+    if (digestOff + digestLen > in.buf.size) return
     
     // authenticate
     authenticated = false
