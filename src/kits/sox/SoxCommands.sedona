@@ -450,6 +450,7 @@ class SoxCommands
     {
       int size = in.readU2()
       Buf buf = service.packet
+      if (size < 0 || size > buf.size - in.pos) { res.error("bad size"); return }
       Sys.copy(buf.bytes, in.pos, buf.bytes, 0, size)
       buf.size = size
       comp.invokeBuf(slot, buf)
