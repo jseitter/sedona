@@ -32,7 +32,13 @@ Cell inet_TcpSocket_connect(SedonaVM* vm, Cell* params)
 #ifdef _WIN32
   WSADATA wsaData;
 #endif
-  struct sockaddr_in sa;
+  // big enough for IPv4 and IPv6, like the UDP natives use
+  struct sockaddr_storage sa;
+#if defined( SOCKET_FAMILY_INET )
+  socklen_t saLen = sizeof(struct sockaddr_in);
+#elif defined( SOCKET_FAMILY_INET6 )
+  socklen_t saLen = sizeof(struct sockaddr_in6);
+#endif
   socket_t sock;
 
   // windoze startup
@@ -42,10 +48,11 @@ Cell inet_TcpSocket_connect(SedonaVM* vm, Cell* params)
 #endif
 
   // initialize the sockaddr from inet::IpAddr and port
-  inet_toSockaddr((struct sockaddr_storage*)&sa, addr, port, 0, 0);
+  memset(&sa, 0, sizeof(sa));
+  inet_toSockaddr(&sa, addr, port, 0, 0);
 
   // create socket
-  sock = socket(sa.sin_family, SOCK_STREAM, 0);
+  sock = socket(sa.ss_family, SOCK_STREAM, 0);
   if (sock < 0)
     return falseCell;
 
@@ -57,7 +64,7 @@ Cell inet_TcpSocket_connect(SedonaVM* vm, Cell* params)
   }
 
   // async connect
-  if (connect(sock, (SOCKADDR_PARAM*)&sa, sizeof(sa)) != 0)
+  if (connect(sock, (SOCKADDR_PARAM*)&sa, saLen) != 0)
   {
     if (!inet_errorIsWouldBlock())
     {
