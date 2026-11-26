@@ -91,7 +91,8 @@ class SoxSession
     }
 
     // generate nonce
-    nonce = (long)Sys.rand() << 32 | (long)Sys.rand()
+    // (mask the low half, a negative int would set all the high bits)
+    nonce = (long)Sys.rand() << 32 | ((long)Sys.rand() & 0xffff_ffffL)
     
     // send back challenge
     OutStream out = prepare(service, Dasp.CHALLENGE, sendWindow.seqNum)
