@@ -55,6 +55,7 @@ internal class Handler
   void accepted()
   {
     pos = cur = 0
+    deadline = Sys.ticks() + requestTimeout
   }
 
   **
@@ -68,6 +69,9 @@ internal class Handler
     // if closed, then no work pending
     if (socket.isClosed()) return false
 
+    // give up on a client which doesn't get its request across
+    if (Sys.ticks() > deadline) { socket.close(); return true }
+
     // if we've run out of buffer then bail
     int left = bufLen - pos
     if (left < 5) { socket.close(); return true }
@@ -75,8 +79,10 @@ internal class Handler
     // read request bytes
     int read = socket.read(buf, pos, left)
 
-    if (read == 0) // no data available yet (nonblocking)
-      return true
+    // no data available yet (nonblocking): that is no work, so the
+    // other handlers and the accept get their turn while we wait
+    if (read == 0)
+      return false
     else if (read < 0) // some error happened
     { 
       if (socket.isClosed())
@@ -226,5 +232,8 @@ internal class Handler
   inline WebReq req        // reusable request
   inline WebRes res        // reusable response
   short cur                // tokenizing cur offset
+  long deadline            // ticks by which the request must be complete
+
+  define long requestTimeout = 10sec
 
 }
