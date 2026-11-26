@@ -286,6 +286,11 @@ class SoxService
         return
     }
 
+    // everything else is only for sessions which have completed
+    // the handshake; until then there is no user to check the
+    // permissions of a request against
+    if (!session.authenticated || session.user == null) return
+
     // let send window check for acks, if the sending window
     // if full, then we can't accept this message b/c we won't
     // be able to send a response
