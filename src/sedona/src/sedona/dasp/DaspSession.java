@@ -363,7 +363,7 @@ public class DaspSession
     // process challenge
     int err = -1;
     String algorithm = challenge.digestAlgorithm();
-    if (algorithm != "SHA-1")
+    if (!"SHA-1".equals(algorithm))
     {
       close(DIGEST_NOT_SUPPORTED, "digest not supported");
       throw new DaspException("Unsupported algorithm", DIGEST_NOT_SUPPORTED);
@@ -418,7 +418,7 @@ public class DaspSession
     // generate a nonce
     this.nonce = new byte[10];
     for (int i=0; i<nonce.length; ++i)
-     this.nonce[i] = (byte)socket.rand.nextInt();
+     this.nonce[i] = (byte)socket.rand.nextInt();  // a SecureRandom
 
     // build challenge message
     DaspMsg chal = new DaspMsg();
@@ -446,7 +446,7 @@ public class DaspSession
          md.update(this.nonce);
          byte[] expected = md.digest();
          byte[] actual = auth.digest();
-         ok = equals(actual, expected);
+         ok = actual != null && MessageDigest.isEqual(actual, expected);
        }
      }
      catch (Exception e)
