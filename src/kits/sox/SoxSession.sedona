@@ -68,7 +68,11 @@ class SoxSession
     // tune the session parameters
     this.remoteId       = remoteId      
     this.idealMax       = Sys.max(Dasp.IDEAL_MAX_VAL, remoteIdealMax)
-    this.receiveTimeout = Sys.max(Dasp.RECEIVE_TIMEOUT_MIN, remoteTimeout)
+    // the timeout the client asks for only applies once it has
+    // logged in, and within limits; until then the session is given
+    // up quickly, so that it doesn't keep one of the few slots busy
+    this.tunedTimeout   = Sys.min(RECEIVE_TIMEOUT_MAX, Sys.max(Dasp.RECEIVE_TIMEOUT_MIN, remoteTimeout))
+    this.receiveTimeout = Dasp.RECEIVE_TIMEOUT_MIN
 
     // check version
     if (version != Dasp.VERSION_VAL)
@@ -171,6 +175,7 @@ class SoxSession
         return
       }
       authenticated = true
+      receiveTimeout = tunedTimeout
     }
                         
     // send back welcome - use the defaults for
@@ -368,6 +373,7 @@ class SoxSession
   short remoteId                     // remote endpoint's session id
   short idealMax                     // session tuned ideal packet size
   short receiveTimeout               // session tuned timeout in seconds
+  short tunedTimeout                 // timeout to use once authenticated
   long lastReceiveTicks              // Ticks of last receive
   long lastSendTicks                 // Ticks of last send
   bool allTreeEvents                 // Subscribed to all component tree events
@@ -378,6 +384,8 @@ class SoxSession
   inline ReceiveWindow receiveWindow // Sliding window for incoming messages 
   inline SendWindow sendWindow       // Sliding window for outgoing messages 
   inline FileTransfer transfer       // File transfer state  
+
+  define int RECEIVE_TIMEOUT_MAX = 300   // seconds
 
   inline Str(8) errStr               // Storage for error code value in hex
 } 
