@@ -176,7 +176,9 @@ class SedonacSuite(Suite):
 #     Assert Failures  = 0
 #
 class SvmSuite(Suite):
-  startRe  = re.compile(r"^-- svm test (\w+)::(\w+)\.(\w+)(.*)$")
+  # the svm prints nothing between the name of a test and its output,
+  # so a failed assert can follow the name directly
+  startRe  = re.compile(r"^-- svm test (\w+)::(\w+)\.(\w+?)(?=ASSERT FAILURE:|\W|$)(.*)$")
   assertRe = re.compile(r"ASSERT FAILURE: (.*) \[Line (\d+)\]")
   endRe    = re.compile(r"^Assert Failures\s*=\s*(\d+)")
 
