@@ -1299,6 +1299,11 @@ class SoxCommands
     BufInStream in = service.in
     Str from = in.readStrInPlace(tempStr1)
     Str to   = in.readStrInPlace(tempStr2)
+    if (from == null || to == null) { res.error("bad name"); return }
+
+    // check permissions - a rename removes one file and replaces
+    // another, so the user needs to be allowed to provision both
+    if (!session.user.canProv(from) || !session.user.canProv(to)) { res.error("denied"); return }
 
     if (!FileStore.rename(from, to)) { res.error(""); return }
 
