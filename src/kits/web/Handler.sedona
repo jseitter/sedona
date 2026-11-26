@@ -104,19 +104,19 @@ internal class Handler
     params.size = 0
     while (cur < pos && buf[cur] != '\r')
     {
-      int idx = params.size
-      params.names[idx]  = token(':')
-      params.values[idx] = token('\r')
-        
-      if (params.names[idx]  == null || 
-          params.values[idx] == null || 
-          !consume('\n'))
+      Str name  = token(':')
+      Str value = token('\r')
+
+      if (name == null || value == null || !consume('\n'))
         return true
 
-      params.names[idx] = params.names[idx].trim()
-      params.values[idx] = params.values[idx].trim()
-        
-      if (params.size < WebParams.max) params.size++
+      // there is room for WebParams.max headers, ignore the rest
+      if (params.size < WebParams.max)
+      {
+        int idx = params.size++
+        params.names[idx]  = name.trim()
+        params.values[idx] = value.trim()
+      }
     }
 
     // should be at end of request
