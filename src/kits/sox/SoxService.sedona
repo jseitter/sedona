@@ -263,6 +263,12 @@ class SoxService
     // ignore messages for an invalid session id
     if (session == null) return
 
+    // a session belongs to the endpoint which opened it; ignore
+    // messages for it which come from any other address or port
+    if (session.addr.port != datagram.port ||
+        datagram.addr == null ||
+        !session.addr.addr.equals(datagram.addr)) return
+
     // keep track of last time message is received
     session.lastReceiveTicks = Sys.ticks()
 
