@@ -134,9 +134,19 @@ internal class Handler
     // the query string if we find a '?'
     req.query = ""    
     byte[] uri = req.uri.toBytes()
+    if (uri[0] != '/')
+    {
+      res.writeStatus(HttpCode.badRequest).finishHeaders().close()
+      return true
+    }
     for (int i=0; true; ++i)
     {
-      if (i >= uriBufLen) return true
+      if (i >= uriBufLen)
+      {
+        uriBuf[uriBufLen-1] = 0
+        res.writeStatus(HttpCode.uriTooLong).finishHeaders().close()
+        return true
+      }
       int c = uri[i]
       if (c == '?')
       {
