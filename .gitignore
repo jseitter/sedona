@@ -24,3 +24,7 @@ sedona-*.zip
 *.swo
 .DS_Store
 statics/*
+
+# The Sedona VM compiled to WebAssembly (adm/wasm/makewasmvm.py)
+bin/svm.mjs
+bin/svm.wasm
