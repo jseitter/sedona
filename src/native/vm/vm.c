@@ -239,6 +239,48 @@ static void initArray(void* base, int length, int size)
 }
 
 //////////////////////////////////////////////////////////////////////////
+// Integer Division
+//////////////////////////////////////////////////////////////////////////
+
+// In C a division by zero, and the smallest integer divided by -1, are
+// undefined.  x86 raises a divide error for both, which ends the process
+// with SIGFPE; ARM carries on.  Sedona code divides by values of
+// properties anybody with access to the device can set, so the opcodes
+// use these functions, which give every CPU the result of an ARM divide
+// instruction:
+//
+//   x / 0    = 0          x % 0    = x
+//   min / -1 = min        min % -1 = 0
+
+static int32_t divInt(int32_t a, int32_t b)
+{
+  if (b == 0)  return 0;
+  if (b == -1) return (int32_t)(0u - (uint32_t)a);
+  return a / b;
+}
+
+static int32_t modInt(int32_t a, int32_t b)
+{
+  if (b == 0)  return a;
+  if (b == -1) return 0;
+  return a % b;
+}
+
+static int64_t divLong(int64_t a, int64_t b)
+{
+  if (b == 0)  return 0;
+  if (b == -1) return (int64_t)((uint64_t)0 - (uint64_t)a);
+  return a / b;
+}
+
+static int64_t modLong(int64_t a, int64_t b)
+{
+  if (b == 0)  return a;
+  if (b == -1) return 0;
+  return a % b;
+}
+
+//////////////////////////////////////////////////////////////////////////
 // Getters
 //////////////////////////////////////////////////////////////////////////
 
@@ -639,8 +681,8 @@ static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc)
 
       // int math
       Case IntMul:    --sp; sp->ival = sp->ival * (sp+1)->ival; ++cp; EndInstr;
-      Case IntDiv:    --sp; sp->ival = sp->ival / (sp+1)->ival; ++cp; EndInstr;
-      Case IntMod:    --sp; sp->ival = sp->ival % (sp+1)->ival; ++cp; EndInstr;
+      Case IntDiv:    --sp; sp->ival = divInt(sp->ival, (sp+1)->ival); ++cp; EndInstr;
+      Case IntMod:    --sp; sp->ival = modInt(sp->ival, (sp+1)->ival); ++cp; EndInstr;
       Case IntAdd:    --sp; sp->ival = sp->ival + (sp+1)->ival; ++cp; EndInstr;
       Case IntSub:    --sp; sp->ival = sp->ival - (sp+1)->ival; ++cp; EndInstr;
       Case IntOr:     --sp; sp->ival = sp->ival | (sp+1)->ival; ++cp; EndInstr;
@@ -667,8 +709,8 @@ static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc)
 
       // long math
       Case LongMul:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) * *(int64_t*)(sp+1); ++cp; EndInstr;
-      Case LongDiv:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) / *(int64_t*)(sp+1); ++cp; EndInstr;   // divdi3
-      Case LongMod:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) % *(int64_t*)(sp+1); ++cp; EndInstr;   // moddi3
+      Case LongDiv:  sp -=2; *(int64_t*)(sp-1) = divLong(*(int64_t*)(sp-1), *(int64_t*)(sp+1)); ++cp; EndInstr;   // divdi3
+      Case LongMod:  sp -=2; *(int64_t*)(sp-1) = modLong(*(int64_t*)(sp-1), *(int64_t*)(sp+1)); ++cp; EndInstr;   // moddi3
       Case LongAdd:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) + *(int64_t*)(sp+1); ++cp; EndInstr;
       Case LongSub:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) - *(int64_t*)(sp+1); ++cp; EndInstr;
       Case LongOr:   sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) | *(int64_t*)(sp+1); ++cp; EndInstr;
