@@ -1209,6 +1209,13 @@ call:   // the return cp is pushed, check that the rest of the frame
         EndInstr;                      // keep chugging
 
       Case CallNativeVoid:
+#ifdef SCODE_DEBUG
+        if (!isNativeIdValid(*(cp+1), *(cp+2)))
+        {
+          printf("ERROR: missing  native method %d::%d\n", *(cp+1), *(cp+2));
+          return ERR_MISSING_NATIVE;
+        }
+#endif
         native = nativeTable[*(cp+1)][*(cp+2)];  // lookup native func ptr
         u2 = *(cp+3);                  // num params in scode itself
         vm->sp = sp;                   // save stack pointer before calling out
