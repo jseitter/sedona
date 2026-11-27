@@ -1199,6 +1199,14 @@ call:   // the return cp is pushed, check that the rest of the frame
         u2 = (u2 << 8) | *(cp+1);
 #endif        
         u2 = ((uint16_t*)addr)[u2];    // lookup method's block index
+        if (u2 == 0)                   // abstract methods have no code:
+        {                              // block 0 is the image header
+#ifdef SCODE_DEBUG
+          printf("ERROR: call of abstract method\n");
+          printf("  method: %s\n", curMethod(vm, fp));
+#endif
+          return ERR_INVALID_METHOD_PARAMS;
+        }
         addr = block2addr(cb, u2);     // address of target method
         (++sp)->aval = cp+4;           // push return cp onto stack
         goto call;                     // reuse common call implementation
