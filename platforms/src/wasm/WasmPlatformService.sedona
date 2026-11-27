@@ -1,0 +1,98 @@
+//
+// Licensed under the Academic Free License version 3.0
+//
+
+**
+** Platform service for the Sedona VM compiled to WebAssembly.
+**
+** The VM yields after every scan cycle (App.run returns Err.yield), so
+** the JavaScript host decides when the next cycle runs: in real time,
+** faster, or one cycle at a time.
+**
+** Before it yields, the service reports the values of the slots on the
+** host's watch list (component id and slot id) using reflection, so the
+** host sees the exact value of every watched slot at the end of every
+** cycle, without C code that knows about field offsets.
+**
+class WasmPlatformService extends PlatformService
+{
+
+////////////////////////////////////////////////////////////////
+// Yield
+////////////////////////////////////////////////////////////////
+
+  override virtual bool yieldRequired()
+  {
+    return true
+  }
+
+  override virtual void yield(long yieldTime)
+  {
+    reportWatches()
+    doYield(yieldTime)
+  }
+
+////////////////////////////////////////////////////////////////
+// Watches
+////////////////////////////////////////////////////////////////
+
+  private static void reportWatches()
+  {
+    int n = watchCount()
+    for (int i=0; i<n; ++i)
+      reportWatch(i)
+  }
+
+  private static void reportWatch(int i)
+  {
+    Component c = Sys.app.lookup(watchComp(i))
+    if (c == null) { reportNone(i); return }
+
+    Slot s = c.type.slot(watchSlot(i))
+    if (s == null || !s.isProp()) { reportNone(i); return }
+
+    switch (s.type.id)
+    {
+      case Type.boolId:
+        if (c.getBool(s)) reportInt(i, 1)
+        else reportInt(i, 0)
+        break
+      case Type.byteId:
+      case Type.shortId:
+      case Type.intId:
+        reportInt(i, c.getInt(s))
+        break
+      case Type.longId:
+        reportLong(i, c.getLong(s))
+        break
+      case Type.floatId:
+        reportFloat(i, c.getFloat(s))
+        break
+      case Type.doubleId:
+        reportDouble(i, c.getDouble(s))
+        break
+      default:
+        reportNone(i)
+    }
+  }
+
+////////////////////////////////////////////////////////////////
+// Natives
+////////////////////////////////////////////////////////////////
+
+  ** Tell the host how long until the next cycle is due (negative if late).
+  internal static native void doYield(long yieldTime)
+
+  ** The host's watch list.
+  internal static native int watchCount()
+  internal static native int watchComp(int i)
+  internal static native int watchSlot(int i)
+
+  ** Store the value of watch i for the host to read after the cycle.
+  internal static native void reportNone(int i)
+  internal static native void reportInt(int i, int v)
+  internal static native void reportLong(int i, long v)
+  internal static native void reportFloat(int i, float v)
+  internal static native void reportDouble(int i, double v)
+
+}

@@ -1,0 +1,31 @@
+<!--
+  -  Sedona Kit
+  -  Licensed under the Academic Free License version 3.0
+  -->
+
+<sedonaKit
+ name = "platWasm"
+ vendor = "Community"
+ description = "Platform support for the Sedona VM compiled to WebAssembly"
+ includeSource = "true"
+ doc = "true"
+>
+
+  <!-- Dependencies -->
+  <depend on="sys 1.0+"  />
+
+  <!-- Source Directories -->
+  <source dir="."/>
+
+  <!-- Natives (platform kits use native kit id 1) -->
+  <native qname="platWasm::WasmPlatformService.doYield"      id="1::0" />
+  <native qname="platWasm::WasmPlatformService.watchCount"   id="1::1" />
+  <native qname="platWasm::WasmPlatformService.watchComp"    id="1::2" />
+  <native qname="platWasm::WasmPlatformService.watchSlot"    id="1::3" />
+  <native qname="platWasm::WasmPlatformService.reportNone"   id="1::4" />
+  <native qname="platWasm::WasmPlatformService.reportInt"    id="1::5" />
+  <native qname="platWasm::WasmPlatformService.reportLong"   id="1::6" />
+  <native qname="platWasm::WasmPlatformService.reportFloat"  id="1::7" />
+  <native qname="platWasm::WasmPlatformService.reportDouble" id="1::8" />
+
+</sedonaKit>
