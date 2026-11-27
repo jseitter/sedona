@@ -45,6 +45,8 @@ $ export SVM_CROSS_COMPILE=arm-linux-gnueabihf-
 $ upstream-sedona/adm/makedev.py -t none -p new-target-platform/platforms/src/generic/unix/generic-unix.xml -k new-target-platform/src/kits/dir.xml -s new-target-platform/scode/defaultKits.xml -a new-target-platform/apps/defaultApp.sax
 ```
 
+The VM is compiled with stack canaries and checked libc functions (`-fstack-protector-strong -D_FORTIFY_SOURCE=2`), and on Linux linked as a position independent executable with a read-only relocation table and a non-executable stack. This is the default for a native build only: a cross compiler may be too old for these options or lack the runtime support for them. Set `SVM_HARDENING=1` to use them with `SVM_CROSS_COMPILE` as well, or `SVM_HARDENING=0` to build without them.
+
 There are some things that have to be done to make this directory structure to work. Most of them covers usage of relative paths to source files.
 
     In platform description 'generic-unix.xml' paths to source code for native kits should be given relative to 'upstream-sedona' directory.
