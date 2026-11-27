@@ -72,6 +72,7 @@ class App
     // free kit ID map
     delete kitIdMap
     kitIdMap = null
+    kitIdMapLen = 0
 
     // free comps array
     compsLen = 0
@@ -342,6 +343,11 @@ class App
     // sanity checking
     if (parent == null || name == null || t == null)
       return null
+
+    // Only a component type has the memory of a component.  The other
+    // types a kit lists are the primitives and sys::Buf, which is not
+    // one of the primitives for Type.isPrimitive().
+    if (!t.is(Component.type)) return null
 
     // don't add if sibiling with same name exists
     Component sibling = lookup(parent.children)
@@ -857,13 +863,15 @@ class App
       // read app kit id, map to equivalent scode kit id
       Kit kit = null
       int kitid = in.read()
-      if (kitid>=0) kit = Sys.kit( kitIdMap[kitid] )
+      if (kitid>=0 && kitid<kitIdMapLen) kit = Sys.kit( kitIdMap[kitid] )
       if (kit == null) return Err.invalidKitId
 
-      // read type id
+      // read type id; the primitive types and sys::Buf are types of the
+      // sys kit too, but a component cannot be one: its fields would be
+      // loaded into the few bytes which are allocated for such a type
       Type t = kit.type(in.read())
 
-      if (t == null) return Err.invalidTypeId
+      if (t == null || !t.is(Component.type)) return Err.invalidTypeId
 
       // allocate component
       Component c
@@ -950,8 +958,10 @@ class App
 
     // Create kit id map array
     if (kitIdMap!=null) delete kitIdMap         // can kitIDMap ever be non-null here?
+    kitIdMapLen = 0
     kitIdMap = new int[ numkits ]
     if (kitIdMap==null) return false
+    kitIdMapLen = numkits
 
 
     // Assume both app & scode have kits in the same order, so we just 
@@ -1219,6 +1229,7 @@ class App
   // IDs may not match even though schemas are compatible.  This array maps app kit IDs 
   // to scode kit IDs.  (created in loadSchema, used in loadApp)
   int[] kitIdMap = null
+  int kitIdMapLen = 0
 
 
   define Str backupAppName = "app.sab.bak"
