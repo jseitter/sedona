@@ -327,7 +327,7 @@ public class Compiler
    */
   public CompilerException err(String msg, Location loc, Throwable e)
   {
-    return err(new CompilerException(msg, null, e));
+    return err(new CompilerException(msg, loc, e));
   }
 
   /**
