@@ -63,6 +63,36 @@ extern int isNativeIdValid(int kitId, int methodId);
 
 static int vmInit(SedonaVM* vm);   
 static int vmEntry(SedonaVM* vm, int methodOffset);
+static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc);
+
+//////////////////////////////////////////////////////////////////////////
+// Stack Checks
+//////////////////////////////////////////////////////////////////////////
+
+// The stack is checked in two places:
+//
+//   - whenever a frame is pushed (on entry to vmCall and by the call
+//     opcodes), that the frame and its locals fit.  This is always
+//     compiled in and is what stops a runaway recursion.
+//
+//   - with SCODE_DEBUG before every opcode, that the temporaries the
+//     opcode pushes fit.  No opcode other than a call pushes more than
+//     STACK_OPCODE_CELLS cells, so the last ones of the stack are kept
+//     free and no opcode can write past the end of the stack.
+//
+// Without SCODE_DEBUG there is no check per opcode.  The scode does not
+// say how many temporaries a method needs, so a frame is only pushed if
+// SVM_STACK_RESERVE cells are left for them above its locals.  A platform
+// can define its own value on the compiler command line.
+#define STACK_OPCODE_CELLS 2
+
+#ifndef SVM_STACK_RESERVE
+  #ifdef SCODE_DEBUG
+    #define SVM_STACK_RESERVE 0
+  #else
+    #define SVM_STACK_RESERVE 32
+  #endif
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 // VM Entry
@@ -415,6 +445,17 @@ int handleStackOverflow(SedonaVM* vm, int opcode, Cell* fp, Cell* sp)
  */
 int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
 {
+  // A native which is called from the method saves its stack pointer
+  // in the vm.  Put back the one of our caller, or a native which calls
+  // us more than once starts each call higher up the stack than the last.
+  Cell* sp = vm->sp;
+  int result = vmExec(vm, method, args, argc);
+  vm->sp = sp;
+  return result;
+}
+
+static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc)
+{
 #ifdef COMPUTED_GOTO
   static void* opcodeLabels[] = OpcodeLabelsArray;
 #endif
@@ -432,7 +473,7 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
   Cell cell;              // temp stack cell
   NativeMethod native;    // temp native method func pointer
   int64_t s8;             // temp signed 64-bit long      
-  Cell* maxStackAddr;     // pointer to top of stack area
+  Cell* stackLimit;       // sp must stay below this between opcodes
   NativeMethod** nativeTable;  // cached pointer to native table
                 
   // init pointers
@@ -442,13 +483,23 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
   cp = block2addr(cb, method);
   numParams = cp[0];
   numLocals = cp[1];                                     
-  maxStackAddr = (Cell*)(vm->stackBaseAddr + vm->stackMaxSize);
+  stackLimit = (Cell*)(vm->stackBaseAddr + vm->stackMaxSize) - STACK_OPCODE_CELLS;
   nativeTable = vm->nativeTable;
 
 
   // check that method has matching parameters
   // and push arguments onto the stack
   if (numParams != argc) return ERR_INVALID_METHOD_PARAMS;
+
+  // check that the arguments, the frame and the locals fit on the stack
+  if (sp == NULL || sp >= stackLimit ||
+      stackLimit - sp <= argc + 3 + numLocals + SVM_STACK_RESERVE)
+  {
+#ifdef SCODE_DEBUG
+    printf("ERROR: Stack overflow exception\n");
+#endif
+    return ERR_STACK_OVERFLOW;
+  }
   for (u2 = 0; u2 < argc; ++u2) *(++sp) = args[u2];
 
   // setup for first call to method
@@ -480,7 +531,7 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
         return handleNullPointer(vm, *cp, fp, sp);
         
       // check for stack overflow           
-      if (sp >= maxStackAddr)
+      if (sp >= stackLimit)
         return handleStackOverflow(vm, *cp, fp, sp);
         
     #endif
@@ -1038,7 +1089,18 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
         addr = block2addr(cb, u2); // address of target method
         (++sp)->aval = cp+3;       // push return cp onto stack
         // common
-call:   (++sp)->aval = fp;         // push old frame pointer
+call:   // the return cp is pushed, check that the rest of the frame
+        // and the locals fit before writing them (cp and fp are still
+        // the ones of the calling method)
+        if (stackLimit - sp <= 2 + addr[1] + SVM_STACK_RESERVE)
+        {
+#ifdef SCODE_DEBUG
+          return handleStackOverflow(vm, *cp, fp, sp);
+#else
+          return ERR_STACK_OVERFLOW;
+#endif
+        }
+        (++sp)->aval = fp;         // push old frame pointer
         (++sp)->aval = addr;       // push new method pointer
         fp = sp-2;                 // update new frame pointer
         numParams = addr[0];       // update new num params
