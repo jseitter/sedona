@@ -61,7 +61,7 @@ extern int isNativeIdValid(int kitId, int methodId);
 // Internal Forwards
 //////////////////////////////////////////////////////////////////////////
 
-static int vmInit(SedonaVM* vm);   
+static int vmInit(SedonaVM* vm);
 static int vmEntry(SedonaVM* vm, int methodOffset);
 static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc);
 
@@ -93,6 +93,25 @@ static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc);
     #define SVM_STACK_RESERVE 32
   #endif
 #endif
+
+//////////////////////////////////////////////////////////////////////////
+// Image Checks
+//////////////////////////////////////////////////////////////////////////
+
+// Number of bytes in the header of an scode image, up to and including
+// the block index of the resume method (see ImageGen.java header()).
+#define SCODE_HEADER_SIZE 26
+
+/**
+ * Return if the block index is one a method can start at: the two
+ * bytes of the method header (numParams, numLocals) and its first
+ * opcode must be inside the image.
+ */
+static int isMethodInImage(SedonaVM* vm, uint16_t method)
+{
+  size_t off = (size_t)method * SCODE_BLOCK_SIZE;
+  return off >= SCODE_HEADER_SIZE && off + 3 <= vm->codeSize;
+}
 
 //////////////////////////////////////////////////////////////////////////
 // VM Entry
@@ -145,7 +164,10 @@ static int vmEntry(SedonaVM* vm, int methodOffset)
 {
   int result;
   uint16_t mainBix;
-  Cell args[2];      
+  Cell args[2];
+
+  // the block index is read from the image header
+  if (vm->codeSize < SCODE_HEADER_SIZE) return ERR_BAD_IMAGE_CODE_SIZE;
 
   // init stack pointer
   vm->sp = (Cell*)vm->stackBaseAddr;
@@ -153,6 +175,7 @@ static int vmEntry(SedonaVM* vm, int methodOffset)
 
   // lookup main block index
   mainBix = *(uint16_t*)(vm->codeBaseAddr+methodOffset);
+  if (!isMethodInImage(vm, mainBix)) return ERR_BAD_IMAGE_CODE_SIZE;
 
   // call main with list of Str[] args
   args[0].aval = (void*)vm->args;
@@ -173,6 +196,10 @@ static int vmInit(SedonaVM* vm)
 {
   uint8_t* cb = (uint8_t*)vm->codeBaseAddr;
   uint32_t u4;
+
+  // an image smaller than its header is not an image; check this
+  // first because everything below reads the header fields
+  if (cb == NULL || vm->codeSize < SCODE_HEADER_SIZE) return ERR_BAD_IMAGE_CODE_SIZE;
 
   // check magic (which also checks endian)
   u4 = *(uint32_t*)(cb+0);
@@ -518,6 +545,10 @@ static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc)
   Cell* stackLimit;       // sp must stay below this between opcodes
   NativeMethod** nativeTable;  // cached pointer to native table
                 
+  // the method to call is given as a block index, which natives
+  // read from scode and slot tables; don't run what is outside the image
+  if (!isMethodInImage(vm, method)) return ERR_INVALID_METHOD_PARAMS;
+
   // init pointers
   sp = vm->sp;
   cb = (uint8_t*)vm->codeBaseAddr;
