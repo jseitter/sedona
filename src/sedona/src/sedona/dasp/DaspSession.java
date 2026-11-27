@@ -363,7 +363,7 @@ public class DaspSession
     // process challenge
     int err = -1;
     String algorithm = challenge.digestAlgorithm();
-    if (algorithm != "SHA-1")
+    if (!"SHA-1".equals(algorithm))
     {
       close(DIGEST_NOT_SUPPORTED, "digest not supported");
       throw new DaspException("Unsupported algorithm", DIGEST_NOT_SUPPORTED);
@@ -418,7 +418,7 @@ public class DaspSession
     // generate a nonce
     this.nonce = new byte[10];
     for (int i=0; i<nonce.length; ++i)
-     this.nonce[i] = (byte)socket.rand.nextInt();
+     this.nonce[i] = (byte)socket.rand.nextInt();  // a SecureRandom
 
     // build challenge message
     DaspMsg chal = new DaspMsg();
@@ -446,7 +446,7 @@ public class DaspSession
          md.update(this.nonce);
          byte[] expected = md.digest();
          byte[] actual = auth.digest();
-         ok = equals(actual, expected);
+         ok = actual != null && MessageDigest.isEqual(actual, expected);
        }
      }
      catch (Exception e)
@@ -454,12 +454,14 @@ public class DaspSession
        e.printStackTrace();
      }
 
-     // if not authenticated
+     // if not authenticated; a session which already is authenticated
+     // is not closed for a message anyone could have sent
      if (!ok)
      {
-       close(NOT_AUTHENTICATED, "not authenticated");
+       if (!authenticated) close(NOT_AUTHENTICATED, "not authenticated");
        return;
      }
+     authenticated = true;
 
      // build welcome
      DaspMsg welcome = new DaspMsg();
@@ -519,7 +521,16 @@ public class DaspSession
 
     // authenticate is always immediately
     // processed on the receiver thread
-    if (msg.msgType == AUTHENTICATE) { welcome(msg); return; }
+    // only a server which has sent its challenge expects one
+    if (msg.msgType == AUTHENTICATE)
+    {
+      if (isServer && nonce != null) welcome(msg);
+      return;
+    }
+
+    // a server session takes nothing but the handshake
+    // from its client until the client has authenticated
+    if (isServer && !authenticated && msg.msgType != CLOSE) return;
 
     // let send window check for acks
     sendWindow.checkAckHeaders(msg);
@@ -697,6 +708,7 @@ public class DaspSession
   String user;                     // username
   String pass;                     // password client side only
   byte[] nonce;                    // one-time nonce server side only
+  volatile boolean authenticated;  // server side: has the client authenticated
   ReceiveQueue receiveQueue;       // receiving queue
   ReceiveWindow receiveWindow;     // receiving window
   SendWindow sendWindow;           // sending window

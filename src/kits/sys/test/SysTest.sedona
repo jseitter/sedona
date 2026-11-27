@@ -70,6 +70,26 @@ class SysTest
     assert(Sys.findLog(App.log.qname) == App.log)
   }
 
+  static void testRand()
+  {
+    // all 32 bits are random: over 64 numbers every bit shows up
+    // both set and clear, and the numbers are not all the same
+    int ones  = 0
+    int zeros = 0
+    int first = Sys.rand()
+    bool same = true
+    for (int i=0; i<64; ++i)
+    {
+      int r = Sys.rand()
+      ones  |= r
+      zeros |= ~r
+      if (r != first) same = false
+    }
+    assert(ones == 0xffff_ffff)
+    assert(zeros == 0xffff_ffff)
+    assert(!same)
+  }
+
   static void testTime()
   {
     long t1   = 0ms

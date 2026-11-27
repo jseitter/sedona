@@ -55,6 +55,7 @@ internal class Handler
   void accepted()
   {
     pos = cur = 0
+    deadline = Sys.ticks() + requestTimeout
   }
 
   **
@@ -68,15 +69,20 @@ internal class Handler
     // if closed, then no work pending
     if (socket.isClosed()) return false
 
+    // give up on a client which doesn't get its request across
+    if (Sys.ticks() > deadline) { socket.close(); return true }
+
     // if we've run out of buffer then bail
     int left = bufLen - pos
     if (left < 5) { socket.close(); return true }
 
     // read request bytes
-    int read = socket.read(buf, pos, bufLen)
+    int read = socket.read(buf, pos, left)
 
-    if (read == 0) // no data available yet (nonblocking)
-      return true
+    // no data available yet (nonblocking): that is no work, so the
+    // other handlers and the accept get their turn while we wait
+    if (read == 0)
+      return false
     else if (read < 0) // some error happened
     { 
       if (socket.isClosed())
@@ -104,19 +110,19 @@ internal class Handler
     params.size = 0
     while (cur < pos && buf[cur] != '\r')
     {
-      int idx = params.size
-      params.names[idx]  = token(':')
-      params.values[idx] = token('\r')
-        
-      if (params.names[idx]  == null || 
-          params.values[idx] == null || 
-          !consume('\n'))
+      Str name  = token(':')
+      Str value = token('\r')
+
+      if (name == null || value == null || !consume('\n'))
         return true
 
-      params.names[idx] = params.names[idx].trim()
-      params.values[idx] = params.values[idx].trim()
-        
-      if (params.size < WebParams.max) params.size++
+      // there is room for WebParams.max headers, ignore the rest
+      if (params.size < WebParams.max)
+      {
+        int idx = params.size++
+        params.names[idx]  = name.trim()
+        params.values[idx] = value.trim()
+      }
     }
 
     // should be at end of request
@@ -128,9 +134,19 @@ internal class Handler
     // the query string if we find a '?'
     req.query = ""    
     byte[] uri = req.uri.toBytes()
+    if (uri[0] != '/')
+    {
+      res.writeStatus(HttpCode.badRequest).finishHeaders().close()
+      return true
+    }
     for (int i=0; true; ++i)
     {
-      if (i >= uriBufLen) return true
+      if (i >= uriBufLen)
+      {
+        uriBuf[uriBufLen-1] = 0
+        res.writeStatus(HttpCode.uriTooLong).finishHeaders().close()
+        return true
+      }
       int c = uri[i]
       if (c == '?')
       {
@@ -226,5 +242,8 @@ internal class Handler
   inline WebReq req        // reusable request
   inline WebRes res        // reusable response
   short cur                // tokenizing cur offset
+  long deadline            // ticks by which the request must be complete
+
+  define long requestTimeout = 10sec
 
 }

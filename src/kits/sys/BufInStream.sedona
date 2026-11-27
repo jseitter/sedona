@@ -41,6 +41,7 @@ final class BufInStream extends InStream
   {
     Buf buf = this.buf
     if (buf.size-pos < len) len = buf.size-pos
+    if (len <= 0) return 0
     Sys.copy(buf.bytes, pos, b, off, len)
     pos += len
     return len
@@ -48,14 +49,18 @@ final class BufInStream extends InStream
 
   **
   ** Read the current position as a null terminated
-  ** string.  Return null on error.  
+  ** string.  Return null on error, which includes a string
+  ** without its terminator inside the size of the buffer.
   **
   Str readStrInPlace(Str str)
   {
     Buf buf = this.buf   
     int off = pos
-    while (buf.bytes[pos++] != 0)
+    while (true)
+    {
       if (pos >= buf.size) return null
+      if (buf.bytes[pos++] == 0) break
+    }
     return Str.fromBytes(buf.bytes, off)
   }
 

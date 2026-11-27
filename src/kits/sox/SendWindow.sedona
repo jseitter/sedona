@@ -90,6 +90,8 @@ class SendWindow
           ackMoreLen = in.read()
           ackMoreOff = in.pos
           ackMore    = in.buf.bytes;
+          // ignore a field which claims more bytes than were received
+          if (ackMoreLen < 0 || ackMoreOff + ackMoreLen > in.buf.size) ackMoreLen = 0
           in.skip(ackMoreLen)
           break
         default:

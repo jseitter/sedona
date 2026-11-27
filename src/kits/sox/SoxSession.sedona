@@ -27,7 +27,9 @@ class SoxSession
     receiveWindow.reset()
     sendWindow.reset()
     transfer.reset()
-    user = null        
+    user = null
+    authenticated = false
+    challenged = false
   }
 
 ////////////////////////////////////////////////////////////////
@@ -66,7 +68,11 @@ class SoxSession
     // tune the session parameters
     this.remoteId       = remoteId      
     this.idealMax       = Sys.max(Dasp.IDEAL_MAX_VAL, remoteIdealMax)
-    this.receiveTimeout = Sys.max(Dasp.RECEIVE_TIMEOUT_MIN, remoteTimeout)
+    // the timeout the client asks for only applies once it has
+    // logged in, and within limits; until then the session is given
+    // up quickly, so that it doesn't keep one of the few slots busy
+    this.tunedTimeout   = Sys.min(RECEIVE_TIMEOUT_MAX, Sys.max(Dasp.RECEIVE_TIMEOUT_MIN, remoteTimeout))
+    this.receiveTimeout = Dasp.RECEIVE_TIMEOUT_MIN
 
     // check version
     if (version != Dasp.VERSION_VAL)
@@ -77,10 +83,11 @@ class SoxSession
     
     // make sure we don't have any other open sessions to the 
     // same client IP address with same session id - that can 
-    // happen if we drop a challenge packet
+    // happen if we drop a challenge packet; a session which has
+    // logged in is not given up for a hello anyone could send
     foreach (SoxSession s : service.sessions, Watch.max)
     {
-      if (s != this &&
+      if (s != this && !s.closed && !s.authenticated &&
           s.remoteId == this.remoteId &&
           s.addr.equals(this.addr))
       {
@@ -90,8 +97,11 @@ class SoxSession
     }
 
     // generate nonce
-    nonce = (long)Sys.rand() << 32 | (long)Sys.rand()
+    // (mask the low half, a negative int would set all the high bits)
+    nonce = (long)Sys.rand() << 32 | ((long)Sys.rand() & 0xffff_ffffL)
     
+    challenged = true
+
     // send back challenge
     OutStream out = prepare(service, Dasp.CHALLENGE, sendWindow.seqNum)
     out.write(Dasp.REMOTE_ID << 2 | Dasp.U2);    
@@ -108,6 +118,9 @@ class SoxSession
   **
   void welcome(SoxService service, int numFields)
   {         
+    // only as the answer to a challenge
+    if (!challenged && !authenticated) return
+
     // authenticate fields     
     Str username  = null
     int digestLen = 0    
@@ -140,13 +153,31 @@ class SoxSession
 
     // bad authenticate headers
     if (digestLen != 20 || username == null) return 
+    if (digestOff + digestLen > in.buf.size) return
     
-    // authenticate
-    if (!authenticate(service, username, digest, digestOff, digestLen))
-    {    
-      close(service, Dasp.NOT_AUTHENTICATED)
-      return
-    }  
+    if (authenticated)
+    {
+      // the client repeats its authenticate if our welcome got lost;
+      // send the welcome again for the very same message, and leave
+      // the session alone for anything else
+      User current = user
+      bool same = authenticate(service, username, digest, digestOff, digestLen) && user == current
+      user = current
+      if (!same) return
+    }
+    else
+    {
+      // authenticate - a challenge is good for one attempt
+      challenged = false
+      if (!authenticate(service, username, digest, digestOff, digestLen))
+      {
+        SoxService.log.warning("login failed from ${addr.addr.toStr()}")
+        close(service, Dasp.NOT_AUTHENTICATED)
+        return
+      }
+      authenticated = true
+      receiveTimeout = tunedTimeout
+    }
                         
     // send back welcome - use the defaults for
     // absMax, receiveMax, and receiveTimeout
@@ -171,20 +202,28 @@ class SoxSession
   **
   bool authenticate(SoxService service, Str username, byte[] digest, int digestOff, int digestLen)
   {                   
-    // lookup user by name                     
-    user = (User)service.userService?.lookupByName(username)
-    if (user == null || user.type != User.type) return false
+    // lookup user by name; the session only gets its user
+    // once the digest has been verified
+    user = null
+    User u = (User)service.userService?.lookupByName(username)
+    if (u == null || u.type != User.type) return false
     
     // create the digest of the actual credentials - we reuse
     // the packet buffer itself for the result by assuming
     // the digest leaves plenty of room afterwards
     authTemp.size = 0
-    authTempOut.writeBytes(user.cred.bytes, 0, user.cred.size)
+    authTempOut.writeBytes(u.cred.bytes, 0, u.cred.size)
     authTempOut.writeI8(nonce)     
     Crypto.sha1(authTemp.bytes, 0, authTemp.size, authDigest, 0)
     
-    // verify if digests are equal                        
-    return Sys.compareBytes(authDigest, 0, digest, digestOff, digestLen) == 0
+    // verify if digests are equal; look at every byte, so that the
+    // time this takes says nothing about where the digests differ
+    int diff = 0
+    for (int i=0; i<digestLen; ++i)
+      diff |= authDigest[i] ^ digest[digestOff+i]
+    if (diff != 0) return false
+    user = u
+    return true
   }                 
   
   private static inline Buf(32) authTemp      
@@ -267,24 +306,6 @@ class SoxSession
   }
   
 ////////////////////////////////////////////////////////////////
-// Discovery response
-////////////////////////////////////////////////////////////////
-  
-  **
-  ** Send a discovery response.
-  **
-  void discoverResponse(SoxService service)
-  {                         
-    // prepare response message
-    OutStream out = prepare(service, Dasp.DISCOVER, 0xffff)
-    out.write(Dasp.PLATFORM_ID << 2 | Dasp.STR) 
-    out.writeStr(Sys.app.platform.platformId.toStr())
-    service.packet.bytes[4] |= 1  // header count    
-    service.send(this)
-  }
-  
-
-////////////////////////////////////////////////////////////////
 // Messaging
 ////////////////////////////////////////////////////////////////
 
@@ -335,14 +356,19 @@ class SoxSession
   short remoteId                     // remote endpoint's session id
   short idealMax                     // session tuned ideal packet size
   short receiveTimeout               // session tuned timeout in seconds
+  short tunedTimeout                 // timeout to use once authenticated
   long lastReceiveTicks              // Ticks of last receive
   long lastSendTicks                 // Ticks of last send
   bool allTreeEvents                 // Subscribed to all component tree events
   long nonce                         // Nonce used for authentication
   User user                          // Authenticated user for session
+  bool authenticated                 // Has the handshake been completed
+  bool challenged                    // Is a challenge waiting for its answer
   inline ReceiveWindow receiveWindow // Sliding window for incoming messages 
   inline SendWindow sendWindow       // Sliding window for outgoing messages 
   inline FileTransfer transfer       // File transfer state  
+
+  define int RECEIVE_TIMEOUT_MAX = 300   // seconds
 
   inline Str(8) errStr               // Storage for error code value in hex
 } 

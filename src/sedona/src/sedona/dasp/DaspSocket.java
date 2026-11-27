@@ -66,7 +66,7 @@ public class DaspSocket
     this.acceptor       = a;  
     this.isAlive        = true;
     this.sessions       = new HashMap(300);      
-    this.rand           = new Random();     
+    this.rand           = new java.security.SecureRandom();
     this.interfacesLock = new Object();  
     this.interfaces     = new DaspSocketInterface[0]; 
     this.qMode          = qMode;      

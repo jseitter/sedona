@@ -1,0 +1,48 @@
+//
+// Copyright (c) 2026 Sedona community
+// Licensed under the Academic Free License version 3.0
+//
+
+**
+** SoxCommandsTest
+**
+class SoxCommandsTest
+  extends Test
+{
+
+  static void testIsLocalPath()
+  {
+    // plain names and sub directories
+    assert(SoxCommands.isLocalPath("app.sab"))
+    assert(SoxCommands.isLocalPath("kits.scode"))
+    assert(SoxCommands.isLocalPath("blob.txt"))
+    assert(SoxCommands.isLocalPath("a/b/c.txt"))
+    assert(SoxCommands.isLocalPath("dir/"))
+    assert(SoxCommands.isLocalPath(".hidden"))
+    assert(SoxCommands.isLocalPath("a..b"))
+    assert(SoxCommands.isLocalPath("..."))
+
+    // empty and absolute
+    assert(!SoxCommands.isLocalPath(""))
+    assert(!SoxCommands.isLocalPath("/"))
+    assert(!SoxCommands.isLocalPath("/etc/hosts"))
+    assert(!SoxCommands.isLocalPath("a//b"))
+
+    // other names for the same file, and leaving the directory
+    assert(!SoxCommands.isLocalPath("."))
+    assert(!SoxCommands.isLocalPath(".."))
+    assert(!SoxCommands.isLocalPath("./app.sab"))
+    assert(!SoxCommands.isLocalPath("../app.sab"))
+    assert(!SoxCommands.isLocalPath("a/./b"))
+    assert(!SoxCommands.isLocalPath("a/../b"))
+    assert(!SoxCommands.isLocalPath("a/.."))
+    assert(!SoxCommands.isLocalPath("a/."))
+
+    // backslashes and drives
+    assert(!SoxCommands.isLocalPath("a\\b"))
+    assert(!SoxCommands.isLocalPath("\\a"))
+    assert(!SoxCommands.isLocalPath("c:a.txt"))
+    assert(!SoxCommands.isLocalPath("a/c:b"))
+  }
+
+}

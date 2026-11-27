@@ -75,6 +75,11 @@ class StaticFileWeblet extends Weblet
 
     prepareFile(req)
 
+    if (file.name == null) {
+      res.writeStatus(HttpCode.notFound).finishHeaders()
+      return
+    }
+
     if (isDir(filePath)) {
       tryAppendIndex(filePath)
     }
@@ -84,6 +89,7 @@ class StaticFileWeblet extends Weblet
 
   internal void reset() 
   {
+    file.name = null
     filePath.set(0, 0)
   }
 
@@ -232,7 +238,15 @@ class StaticFileWeblet extends Weblet
     if (req.path.size < 1)
       return
     else {
-      //TODO: process path to avoid security issues
+      // only files below the directory the svm runs in: no segment
+      // of the path may lead back out of it
+      for(int i=0; i<req.path.size; ++i) {
+        Str name = req.path.names[i]
+        if (name.equals("..") || name.equals(".")) return
+        for(int j=0; j<name.length(); ++j)
+          if (name.get(j) == 0x5c) return   // backslash
+      }
+
       filePath.copyFromStr(".", pathStrLen);
       int index = filePath.length()
       byte[] fileBuf = filePath.toBytes()

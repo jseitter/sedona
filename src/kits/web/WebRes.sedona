@@ -255,6 +255,8 @@ class WebRes
         case '<': print("&lt;"); break;
         case '>': print("&gt;"); break;
         case '&': print("&amp;"); break;
+        case '"': print("&quot;"); break;
+        case 0x27: print("&#39;"); break;   // single quote
         default: writeChar(c); break;
       }
     }

@@ -67,8 +67,8 @@ class SpyWeblet
     for (int i=1; i<path.size; ++i)
     {
       res.w(" | <a href='")
-      for (int j=0; j<=i; ++j) res.w("/").w(path.names[j])
-      res.w("'>").w(path.names[i]).w("</a>")
+      for (int j=0; j<=i; ++j) res.w("/").esc(path.names[j])
+      res.w("'>").esc(path.names[i]).w("</a>")
     }
     res.w("<hr/>")
   }
@@ -623,8 +623,19 @@ class SpyWeblet
 
   public void echo(WebReq req, WebRes res)
   {
+    // same as WebReq.dump, but what came from the client is escaped
     res.w("<pre>\n")
-    req.dump(res)
+    res.w("WebReq\n")
+    res.w("  method:  '").esc(req.method).w("'\n")
+    res.w("  uri:     '").esc(req.uri).w("'\n")
+    res.w("  version: '").esc(req.version).w("'\n")
+    res.w("  path:    ")
+    for (int i=0; i<req.path.size; ++i) res.w("/").esc(req.path.names[i])
+    res.w("\n")
+    res.w("  query:   '").esc(req.query).w("'\n")
+    res.w("  params: \n")
+    for (int i=0; i<req.params.size; ++i)
+      res.w("   ").esc(req.params.names[i]).w(": '").esc(req.params.values[i]).w("'\n")
     res.w("</pre>\n")
   }
 

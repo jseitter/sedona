@@ -245,6 +245,37 @@ class BufTest
     assert(bytes[3] == 0xff)
   }
 
+  static void testReadPastEnd()
+  {
+    // a string must have its terminator inside the buffer
+    buf.clear()
+    out.writeStr("abc")
+    in.rewind()
+    assert(in.readStrInPlace(str).equals("abc"))
+    assert(in.pos == 4)
+    assert(in.readStrInPlace(str) == null)
+    assert(in.pos == 4)
+
+    // the byte past the size is a zero, but not part of the buffer
+    buf.clear()
+    out.write('x')
+    out.write('y')
+    out.write(0)
+    buf.size = 2
+    in.rewind()
+    assert(in.readStrInPlace(str) == null)
+    assert(in.pos == 2)
+    assert(in.read() == -1)
+
+    // nothing to read: the destination is left alone
+    bytes[0] = 0xee
+    assert(in.readBytes(bytes, 0, 5) == 0)
+    assert(in.readBytes(bytes, 0, -1) == 0)
+    in.pos = 3
+    assert(in.readBytes(bytes, 0, 5) == 0)
+    assert(bytes[0] == 0xee)
+  }
+
 ////////////////////////////////////////////////////////////////
 // Literals
 ////////////////////////////////////////////////////////////////
