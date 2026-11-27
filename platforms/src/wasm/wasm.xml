@@ -1,0 +1,28 @@
+<!--
+  -  Sedona Platform Manifest for the Sedona VM compiled to WebAssembly
+  -  (wasm32: 4-byte references, little endian). Build it with
+  -  adm/wasm/makewasmvm.py.
+  -->
+
+<sedonaPlatform vendor="Community" id="community-wasm-${sedona.env.version}">
+
+  <compile endian="little" blockSize="4" refSize="4" debug="true" test="true">
+
+    <!-- Native Kits (no serial; web runs but cannot serve without TCP to the outside) -->
+    <nativeKit depend="sys 1.0+"         />
+    <nativeKit depend="inet 1.0+"        />
+    <nativeKit depend="datetimeStd 1.0+" />
+    <nativeKit depend="platWasm 1.0+"    />
+
+    <!-- Sources: the portable natives plus the wasm ones for time, sockets and the platform -->
+    <nativeSource path="/src/native/vm" />
+    <nativeSource path="/src/kits/sys/native" />
+    <nativeSource path="/src/kits/sys/native/std" />
+    <nativeSource path="/src/kits/inet/native" />
+    <nativeSource path="/src/kits/inet/native/sha1" />
+    <nativeSource path="/src/kits/datetimeStd/native/std" />
+    <nativeSource path="/src/kits/datetimeStd/native/default" />
+    <nativeSource path="/platforms/src/wasm/native" />
+  </compile>
+
+</sedonaPlatform>

@@ -1,0 +1,34 @@
+<!--
+  -  Sedona SCode manifest for the test suite on the Sedona VM compiled to
+  -  WebAssembly (run with adm/wasm/runwasm.mjs -test).
+  -->
+
+<sedonaCode
+   endian="little"
+   blockSize="4"
+   refSize="4"
+   main="sys::Sys.main"
+   debug="true"
+   test="true"
+>
+
+  <!-- Kits -->
+  <depend on="sys 1.2" />
+  <depend on="sox 1.2" />
+  <depend on="inet 1.2" />
+  <depend on="pstore 1.2" />
+  <depend on="datetime 1.2" />
+  <depend on="datetimeStd 1.2" />
+  <depend on="basicSchedule 1.2" />
+  <depend on="pricomp 1.2" />
+  <depend on="logManager 1.2" />
+  <depend on="soxcert 1.2" />
+  <depend on="platWasm 1.2" />
+  <depend on="func 1.2"    />
+  <depend on="hvac 1.2"    />
+  <depend on="logic 1.2"   />
+  <depend on="math 1.2"    />
+  <depend on="timing 1.2"  />
+  <depend on="types 1.2"   />
+
+</sedonaCode>

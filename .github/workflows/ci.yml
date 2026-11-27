@@ -90,3 +90,66 @@ jobs:
           name: test-results-${{ matrix.name }}
           path: build/test-results/
           if-no-files-found: warn
+
+  # The Sedona VM compiled to WebAssembly (platforms/src/wasm): the test
+  # suite and an app under Node; the VM, the images and the manifests are
+  # kept as an artifact for the web editor's simulation.
+  wasm:
+    name: wasm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EMSDK_IMAGE: emscripten/emsdk:7.0.1
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Build sedonac, the kits, the images and the app
+        run: |
+          source adm/unix/init.sh
+          python3 - <<'PY'
+          import sys, compilekit, env, makesedona, makesedonac
+          if makesedona.compile() or makesedonac.compile():
+              sys.exit("building the tools failed")
+          compilekit.compile(env.kits)
+          PY
+          bin/sedonac.sh scode/wasm-test.xml
+          bin/sedonac.sh scode/wasm.xml
+          bin/sedonac.sh apps/wasm.sax
+
+      - name: Build svm.wasm
+        run: |
+          source adm/unix/init.sh
+          docker pull -q "$EMSDK_IMAGE"
+          EMCC="docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -w /src $EMSDK_IMAGE emcc" \
+            python3 adm/wasm/makewasmvm.py
+
+      - name: Test svm.wasm
+        run: node adm/wasm/runwasm.mjs bin/svm.mjs scode/wasm-test.scode -test
+
+      - name: Run an app on svm.wasm
+        run: node adm/wasm/runwasm.mjs bin/svm.mjs scode/wasm.scode apps/wasm.sab --cycles 50
+
+      - name: Upload svm.wasm, images and manifests
+        uses: actions/upload-artifact@v7
+        with:
+          name: sedona-wasm
+          path: |
+            bin/svm.mjs
+            bin/svm.wasm
+            scode/wasm.scode
+            scode/wasm.xml
+            scode/wasm-test.scode
+            apps/wasm.sab
+            apps/wasm.sax
+            manifests/
+          if-no-files-found: error

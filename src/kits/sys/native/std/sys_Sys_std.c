@@ -104,7 +104,7 @@ Cell sys_Sys_doubleStr(SedonaVM* vm, Cell* params)
 // Return zero if it has no source of them.
 static int osRandom(void* buf, size_t len)
 {
-#if defined(__UNIX__)
+#if defined(__UNIX__) || defined(__EMSCRIPTEN__)
   static FILE* urandom = NULL;
   if (urandom == NULL)
   {
