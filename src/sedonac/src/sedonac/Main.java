@@ -45,6 +45,7 @@ public class Main
     println("  -noOptimize  skip const folding and optimization steps");
     println("  -noChecksum  exclude checksums from sax if input is sab file");
     println("  -stageSim    stage platform for simulated SVM build");
+    println("  -json <file> also write errors and warnings to file as JSON");
   }
 
   private static void errUsage(String err)
@@ -99,6 +100,7 @@ public class Main
     // init compiler
     Compiler compiler = new Compiler();
     String input = null;
+    File jsonFile = null;
 
     // process args
     for (int i=0; i<args.length; ++i)
@@ -166,6 +168,13 @@ public class Main
       {
         compiler.sim = true;
       }
+      else if (arg.equals("-json"))
+      {
+        if (i+1 >= args.length)
+          errUsage("Missing json file");
+        else
+          jsonFile = new File(args[++i]);
+      }
       else if (arg.startsWith("-"))
       {
         errUsage("Unrecognized option " + arg);
@@ -194,7 +203,7 @@ public class Main
         System.out.println("*** Success with " + num + " warning(s) ***");
       else
         System.out.println("*** Success! ***");
-      return 0;
+      return writeJson(jsonFile, compiler, null, 0);
     }
     catch(CompilerException e)
     {
@@ -206,14 +215,39 @@ public class Main
       {
         System.out.println("*** FAILED with " + numErr + " error(s) and " + numWarn + " warning(s) ***");
       }
-      return 1;
+      return writeJson(jsonFile, compiler, numErr == 0 ? e : null, 1);
     }
     catch(Throwable e)
     {
       compiler.log.error("Internal compiler error", e);
       e.printStackTrace();
+      return writeJson(jsonFile, compiler, new CompilerException("Internal compiler error: " + e, null), 1);
+    }
+  }
+
+  /**
+   * For -json: write the errors and warnings of the compile, plus extra
+   * (an error that is not in the compiler's list), and return result.
+   */
+  private static int writeJson(File file, Compiler compiler, CompilerException extra, int result)
+  {
+    if (file == null) return result;
+    DiagnosticsJson json = new DiagnosticsJson(result == 0);
+    CompilerException[] errors = compiler.errors();
+    for (int i=0; i<errors.length; ++i) json.add("error", errors[i]);
+    if (extra != null) json.add("error", extra);
+    CompilerException[] warnings = compiler.warnings();
+    for (int i=0; i<warnings.length; ++i) json.add("warning", warnings[i]);
+    try
+    {
+      json.write(file);
+    }
+    catch (Exception e)
+    {
+      System.out.println("ERROR: Cannot write " + file + ": " + e);
       return 1;
     }
+    return result;
   }
 
   public static void main(String args[])

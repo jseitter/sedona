@@ -49,7 +49,15 @@ public class ConvertAppFile
       if (xml == null)
         app = OfflineApp.decodeAppBinary(Buf.readFrom(from));
       else
-        app = OfflineApp.decodeAppXml(xml);
+      {
+        java.util.ArrayList warnings = new java.util.ArrayList();
+        app = OfflineApp.decodeAppXml(xml, warnings);
+        for (int i=0; i<warnings.size(); ++i)
+        {
+          XException w = (XException)warnings.get(i);
+          compiler.warn(w.getMessage(), w.location == null ? null : new Location(w.location));
+        }
+      }
     }
     catch (XException e)
     {
