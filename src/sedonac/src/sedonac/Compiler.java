@@ -361,14 +361,22 @@ public class Compiler
 
   public void warn(String msg)
   {
-    log.warn("[WARNING] " + msg);
-    warnings.add(msg);
+    warn(msg, null);
   }
 
   public void warn(String msg, Location loc)
   {
-    if (loc != null) msg = loc + ": " + msg;
-    warn(msg);
+    CompilerException w = new CompilerException(msg, loc);
+    log.warn("[WARNING] " + w.toLogString());
+    warnings.add(w);
+  }
+
+  /**
+   * Return list of accumulated warnings, each with its message and location.
+   */
+  public CompilerException[] warnings()
+  {
+    return (CompilerException[])warnings.toArray(new CompilerException[warnings.size()]);
   }
 
 ////////////////////////////////////////////////////////////////
@@ -414,7 +422,7 @@ public class Compiler
   public Namespace ns;             // ctor
   public XElem xml;                // compile(String)
   ArrayList errors;                // err()
-  ArrayList warnings;              // warn() - ArrayList so spawn retains state
+  ArrayList warnings;              // warn() CompilerExceptions - ArrayList so spawn retains state
 
   // compile kit pipeline
   public KitDef ast;               // InitKitCompile
