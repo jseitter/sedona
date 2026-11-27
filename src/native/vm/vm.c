@@ -392,6 +392,15 @@ void setRef(void* self, int offset, void* val)
 
 #ifdef SCODE_DEBUG
 
+// The names come from the scode and are as long as the source wants them
+// to be (a kit, type and test method name easily add up to more than 64
+// characters), so they are cut to the size of the buffer.  snprintf of
+// Visual C++ before 2015 is called _snprintf and doesn't terminate a
+// string it had to cut, so the last byte is always set to zero.
+#if defined(_MSC_VER) && _MSC_VER < 1900
+  #define snprintf _snprintf
+#endif
+
 const char* qnameType(SedonaVM* vm, uint16_t block)
 {
   static char buf[64];
@@ -400,19 +409,21 @@ const char* qnameType(SedonaVM* vm, uint16_t block)
   const unsigned char* kitName  = block2addr(cb, pair[0]);
   const unsigned char* typeName = block2addr(cb, pair[1]);
 
-  sprintf(buf, "%s::%s", kitName, typeName);
+  snprintf(buf, sizeof(buf), "%s::%s", kitName, typeName);
+  buf[sizeof(buf)-1] = '\0';
   return buf;
 }
 
 const char* qnameSlot(SedonaVM* vm, uint16_t block)
 {
-  static char buf[64];
+  static char buf[128];
   const uint8_t* cb = vm->codeBaseAddr;
   uint16_t* pair = (uint16_t*)block2addr(cb, block);
   const char* typeName = qnameType(vm, pair[0]);
   const unsigned char* slotName = block2addr(cb, pair[1]);
 
-  sprintf(buf, "%s.%s", typeName, slotName);
+  snprintf(buf, sizeof(buf), "%s.%s", typeName, slotName);
+  buf[sizeof(buf)-1] = '\0';
   return buf;
 }
 
@@ -443,7 +454,7 @@ void dumpCallStack(SedonaVM* vm, Cell* fp)
 
 const char* opcodeToName(int opcode)
 {
-  static char temp[6];
+  static char temp[12];
 
   if (0 <= opcode && opcode < NumOpcodes)
   {
@@ -451,7 +462,8 @@ const char* opcodeToName(int opcode)
   }
   else
   {
-    sprintf(temp, "0x%x", opcode);
+    snprintf(temp, sizeof(temp), "0x%x", opcode);
+    temp[sizeof(temp)-1] = '\0';
     return temp;
   }
 }
