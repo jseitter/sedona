@@ -103,6 +103,9 @@ def compile():
     print("** " + str(err))
     print("** FAILED [" + env.svmExe + "]")
     print("**")
+    return 1
+
+  return 0
 
 def verifyOpts():
   global platFile
@@ -133,7 +136,9 @@ def main(argv):
         platFile  = arg
 
     verifyOpts()
-    compile()
+    status = compile()
+    if status:
+      return status
     platArchive.main(["--db", "--stage", os.path.join(stageDir, ".par")])
 
   except getopt.GetoptError:
@@ -142,6 +147,5 @@ def main(argv):
 
 # __main__
 if __name__ == '__main__':
-  main(sys.argv[1:])
-  sys.exit()
+  sys.exit(main(sys.argv[1:]))
 
