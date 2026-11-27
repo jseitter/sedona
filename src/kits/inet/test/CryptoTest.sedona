@@ -23,6 +23,13 @@ class CryptoTest
   {
     verifySha1("hello", 0x[aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d])
     verifySha1("user:password", 0x[b6952aff83e7e40eb87d567243480e27c656aa46])
+    verifySha1("", 0x[da39a3ee5e6b4b0d3255bfef95601890afd80709])
+
+    // a negative length is no input
+    Buf empty = 0x[da39a3ee5e6b4b0d3255bfef95601890afd80709]
+    Crypto.sha1("hello".toBytes(), 0, -1, hash.bytes, 0)
+    for (int i=0; i<20; ++i)
+      assert(hash.bytes[i] == empty.get(i))
   }
   
   static void verifySha1(Str in, Buf expected)

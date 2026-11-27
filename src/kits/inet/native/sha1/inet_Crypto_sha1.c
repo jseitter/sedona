@@ -26,6 +26,10 @@ Cell inet_Crypto_sha1(SedonaVM* vm, Cell* params)
   int32_t  outOff = params[4].ival;
   SHA1Context cx;
 
+  // SHA1Input takes the length as unsigned: a negative one would hash
+  // four gigabytes of memory.  It is the hash of no input instead.
+  if (len < 0) len = 0;
+
   in  = in + inOff;
   out = out + outOff;
 

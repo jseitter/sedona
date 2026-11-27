@@ -105,6 +105,14 @@ Cell inet_TcpSocket_finishConnect(SedonaVM* vm, Cell* params)
   timeout.tv_sec = 0;
   timeout.tv_usec = 0;
 
+#ifndef _WIN32
+  // An fd_set is a bitmap with one bit for each descriptor it has room
+  // for: FD_SET on a closed socket (-1), or on a descriptor above its
+  // size, writes outside of it.  Its size is not FD_SETSIZE here, see
+  // inet_util_std.h.  Report those as a failed connection attempt.
+  if (sock < 0 || (size_t)sock >= sizeof(fd_set) * 8) return trueCell;
+#endif
+
   // selectors
   FD_ZERO(&writable);
   FD_ZERO(&excepts);
@@ -182,6 +190,14 @@ Cell inet_TcpSocket_write(SedonaVM* vm, Cell* params)
   socket_t sock = getSocket(self);
   Cell result;
 
+  // send takes the length as unsigned: a negative one would
+  // send the memory which follows the buffer to the peer
+  if (len < 0)
+  {
+    inet_TcpSocket_close(vm, params);
+    return negOneCell;
+  }
+
   buf = buf + off;
   //NOTE: MSG_NOSIGNAL is not defined under macOS(BSD like
   //      system?), should use `setsockopt` to set 
@@ -209,6 +225,14 @@ Cell inet_TcpSocket_read(SedonaVM* vm, Cell* params)
   int32_t  len  = params[3].ival;
   socket_t sock = getSocket(self);
   Cell result;
+
+  // recv takes the length as unsigned: a negative one would let
+  // the peer write over the memory which follows the buffer
+  if (len < 0)
+  {
+    inet_TcpSocket_close(vm, params);
+    return negOneCell;
+  }
 
   buf = buf + off;
 
