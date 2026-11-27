@@ -257,7 +257,11 @@ public class OfflineComponent
     Slot slot = type.slot(name);
     if (slot == null)
     {
-      System.out.println("WARNING: Unknown slot " + type + "." + name + " [" + xml.location() + "]");
+      XException w = new XException("Unknown slot " + type + "." + name, xml);
+      if (app != null)
+        app.warn(w);
+      else
+        System.out.println("WARNING: " + w.getMessage() + " [" + w.location + "]");
       return;
     }
     

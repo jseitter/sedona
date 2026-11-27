@@ -468,6 +468,17 @@ public class OfflineApp
   public static OfflineApp decodeAppXml(XElem xml)
     throws Exception
   {
+    return decodeAppXml(xml, null);
+  }
+
+  /**
+   * Decode an app from XML.  Problems that do not stop the decode,
+   * such as a property the type does not have, are added to warnings
+   * as XExceptions; if warnings is null they are printed to stdout.
+   */
+  public static OfflineApp decodeAppXml(XElem xml, ArrayList warnings)
+    throws Exception
+  {
     // check root
     if (!xml.name().equals("sedonaApp"))
       throw new XException("Root element must be <sedonaApp>", xml);
@@ -477,6 +488,7 @@ public class OfflineApp
 
     // decode App component
     OfflineApp app = new OfflineApp(schema);
+    app.decodeWarnings = warnings;
     XElem appXml = xml.elem("app", true);
     app.decodeXmlProps(appXml);
     app.decodeXmlChildren(appXml);
@@ -657,6 +669,18 @@ public class OfflineApp
   private OfflineComponent[] lookup;   // indexed by component id
   private ArrayList links;
   private int lastId;
+  private ArrayList decodeWarnings;    // see decodeAppXml(XElem, ArrayList)
+
+  /**
+   * Report a problem found while decoding that does not stop the decode.
+   */
+  void warn(XException w)
+  {
+    if (decodeWarnings != null)
+      decodeWarnings.add(w);
+    else
+      System.out.println("WARNING: " + w.getMessage() + " [" + w.location + "]");
+  }
 
 }
 
