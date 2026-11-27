@@ -242,6 +242,11 @@ Cell serial_SerialPortNative_doReadBytesNative(SedonaVM* vm, Cell* params)
 	if (!isOpen(portNum))
 		return negOneCell;
 
+	/* read takes the length as unsigned: with a negative one whatever
+	   the port received would be written over what follows the buffer */
+	if (nbytes < 0)
+		return negOneCell;
+
 	pu8Buf = pu8Buf + off;
 	bytesRead = doReadBytes(&portHandles[portNum], pu8Buf, nbytes);
 	ret.ival = bytesRead;
@@ -263,6 +268,11 @@ Cell serial_SerialPortNative_doWriteBytesNative(SedonaVM* vm, Cell* params)
 	int32_t  bytesWritten;
 
 	if (!isOpen(portNum))
+		return negOneCell;
+
+	/* write takes the length as unsigned: a negative one would
+	   send the memory which follows the buffer out of the port */
+	if (nbytes < 0)
 		return negOneCell;
 
 	pu8Buf = pu8Buf + off;
