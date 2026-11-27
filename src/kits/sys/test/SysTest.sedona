@@ -61,6 +61,18 @@ class SysTest
     Sys.andBytes(0xcf, bytes, 0, len)
     for (int i=0; i<len; ++i) assert(bytes[i] == 0x8b)
     for (int i=len; i<50; ++i) assert(bytes[i] == 0xa3)
+
+    // set
+    Sys.setBytes(0x5c, bytes, 0, len)
+    for (int i=0; i<len; ++i) assert(bytes[i] == 0x5c)
+    for (int i=len; i<50; ++i) assert(bytes[i] == 0xa3)
+
+    // a negative length is no bytes
+    for (int i=0; i<50; ++i) bytes[i] = 0xa3
+    Sys.setBytes(0x5c, bytes, 0, -len)
+    Sys.orBytes(0x18, bytes, 0, -len)
+    Sys.andBytes(0xcf, bytes, 0, -len)
+    for (int i=0; i<50; ++i) assert(bytes[i] == 0xa3)
   }
 
   static void testNumStr()

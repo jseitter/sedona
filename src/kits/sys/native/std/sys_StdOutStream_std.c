@@ -27,6 +27,9 @@ Cell sys_StdOutStream_doWriteBytes(SedonaVM* vm, Cell* params)
   int32_t  off = params[1].ival;
   int32_t  len = params[2].ival;
   
+  // fwrite takes the length as unsigned
+  if (len <= 0) return trueCell;
+
   buf = buf + off;
 
   fwrite(buf, 1, len, stdout);

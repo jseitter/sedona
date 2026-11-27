@@ -257,6 +257,10 @@ Cell sys_FileStore_doReadBytes(SedonaVM* vm, Cell* params)
   // sanity check arguments. FileStream requires -1 on eof/error.
   if ((fp == NULL) || feof(fp) || ferror(fp)) return negOneCell;
 
+  // fread takes the length as unsigned: a negative one would
+  // read the rest of the file over whatever follows the buffer
+  if (len < 0) return negOneCell;
+
   buf = buf + off;
 
   result.ival = fread(buf, 1, len, fp);
@@ -289,6 +293,9 @@ Cell sys_FileStore_doWriteBytes(SedonaVM* vm, Cell* params)
 
   // sanity check arguments
   if (fp == NULL ) return negOneCell;
+
+  // fwrite takes the length as unsigned
+  if (len < 0) return falseCell;
 
   buf = buf + off;
 
@@ -391,6 +398,9 @@ Cell sys_FileStore_rename(SedonaVM* vm, Cell* params)
   int r;
   struct stat statBuf;
 
+  // sanity check arguments
+  if (from == NULL || to == NULL) return falseCell;
+
   if ((stat(to, &statBuf) == 0) && (remove(to) != 0))
     return falseCell;
 
@@ -410,6 +420,9 @@ Cell sys_FileStore_remove(SedonaVM* vm, Cell* params)
 
   Cell ret = trueCell;
   struct stat statBuf;
+
+  // sanity check arguments (there is no such file to remove)
+  if (filename == NULL) return ret;
 
   if ((stat(filename, &statBuf) == 0) && (remove(filename) != 0))
      ret = falseCell;
