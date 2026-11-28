@@ -25,6 +25,33 @@ import fileutil
 #   refSize:  pointer size in bytes the platform definition asks for,
 #             or None if unknown
 #
+#
+# Compiler and linker options which make memory errors in the VM and its
+# natives harder to exploit: stack canaries, checked libc string and
+# memory functions, and on Linux a position independent executable with
+# a read-only relocation table and a non-executable stack.
+#
+# They are used by default for a native build. A cross compiler may be
+# too old for them or lack the runtime support, so for a cross build
+# they have to be asked for. $SVM_HARDENING overrides both: 1 turns the
+# options on, 0 turns them off.
+#
+def hardeningFlags(compile_prefix):
+  setting = os.environ.get("SVM_HARDENING")
+  if setting is None:
+    enabled = compile_prefix is None
+  else:
+    enabled = setting.strip().lower() not in ("0", "no", "off", "false", "")
+  if not enabled:
+    return ""
+
+  # distributions which already define _FORTIFY_SOURCE in their gcc
+  # warn about a second definition, so drop theirs first
+  flags = " -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2"
+  if sys.platform.startswith("linux"):
+    flags += " -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack"
+  return flags
+
 #def compile(exeFile, srcFiles, includes, libs, defs):
 def gcc(exeFile, srcFiles, includes, libs, defs, refSize=None):
   # standard includes
@@ -59,6 +86,9 @@ def gcc(exeFile, srcFiles, includes, libs, defs, refSize=None):
 
   # the VM accesses the stack and scode through casted pointers
   cmd += " -fno-strict-aliasing"
+
+  # make memory errors in the VM and its natives harder to exploit
+  cmd += hardeningFlags(compile_prefix)
 
   cmd += " -DPLAT_BUILD_VERSION=" + '\\"' + env.buildVersion() + '\\"'
 

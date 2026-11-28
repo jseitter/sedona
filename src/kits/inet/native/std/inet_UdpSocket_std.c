@@ -309,6 +309,10 @@ Cell inet_UdpSocket_send(SedonaVM* vm, Cell* params)
   buf = datagram.buf + datagram.off;
   len = datagram.len;
 
+  // sendto takes the length as unsigned: a negative one would
+  // send the memory which follows the buffer
+  if (len < 0) return falseCell;
+
   rc = sendto(sock, buf, len, 0, (const struct sockaddr *)&addr, addrLen);
 
   if (rc==SOCKET_ERROR) 
@@ -374,7 +378,12 @@ Cell inet_UdpSocket_receive(SedonaVM* vm, Cell* params)
   buf = datagram.buf + datagram.off;
   len = datagram.len;
 
-  r = recvfrom(sock, buf, len, 0, (struct sockaddr *)&addr, &addrLen);
+  // recvfrom takes the length as unsigned: with a negative one a
+  // datagram of any size would be written over what follows the buffer
+  if (len < 0)
+    r = SOCKET_ERROR;
+  else
+    r = recvfrom(sock, buf, len, 0, (struct sockaddr *)&addr, &addrLen);
 
   // Update shared struct from contents of local var
   if (r == SOCKET_ERROR)

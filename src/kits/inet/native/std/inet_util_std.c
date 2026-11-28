@@ -143,10 +143,18 @@ int inet_toSockaddr(struct sockaddr_storage* addr, uint32_t* ipAddr, int port, i
   paddr->sin6_scope_id = htonl(scope);
   paddr->sin6_flowinfo = htonl(flow);
 
-  x[0] = ipAddr[0];
-  x[1] = ipAddr[1];
-  x[2] = ipAddr[2];
-  x[3] = ipAddr[3];
+  // no address is the unspecified address, like for IPv4 above
+  if (ipAddr == NULL)
+  {
+    x[0] = x[1] = x[2] = x[3] = 0;
+  }
+  else
+  {
+    x[0] = ipAddr[0];
+    x[1] = ipAddr[1];
+    x[2] = ipAddr[2];
+    x[3] = ipAddr[3];
+  }
 
 #endif
 

@@ -203,12 +203,61 @@ class AppTest
     // cleanup
     a.cleanupApp()
 
+    // an app is made of components only
+    verifyBadTypes(a)
+
     
     // Test callbacks (unrelated to preceding tests)
     verifyCallbacks()
 
   }
 
+
+  // The primitive types and sys::Buf are types of the sys kit, with their
+  // own size.  They must not be added or loaded as a component.
+  static void verifyBadTypes(App a)
+  {
+    Type intType = Sys.type(0, Type.intId)
+    Type bufType = Sys.type(0, Type.bufId)
+    assert(intType != null && intType.isPrimitive())
+    assert(bufType != null && !bufType.is(Component.type))
+
+    a.initApp(10)
+    assert(a.add(a, "bad", intType) == null)
+    assert(a.add(a, "bad", bufType) == null)
+    assert(a.add(a, "good", TestComp.type) != null)
+    a.cleanupApp()
+
+    // app file with component 1 of type sys::int
+    assert(loadBadApp(a, 0, Type.intId) == Err.invalidTypeId)
+    // app file with component 1 of type sys::Buf
+    assert(loadBadApp(a, 0, Type.bufId) == Err.invalidTypeId)
+    // app file with component 1 of a kit which is not in its schema
+    assert(loadBadApp(a, Sys.kitsLen, 0) == Err.invalidKitId)
+    assert(loadBadApp(a, 255, 0) == Err.invalidKitId)
+  }
+
+  static int loadBadApp(App a, int kitId, int typeId)
+  {
+    Buf buf = BufTest.buf
+    BufOutStream out = BufTest.out
+    BufInStream in = BufTest.in
+    buf.clear()
+    out.writeI4(0x73617070)
+    out.writeI4(0x0003)
+    a.saveSchema(out)
+    out.writeI2(1)        // maxId
+    out.writeI2(1)        // component id
+    out.write(kitId)
+    out.write(typeId)
+    for (int i=0; i<32; ++i) out.write(0)
+
+    in.rewind()
+    a.initApp(10)
+    int r = a.loadApp(in)
+    a.cleanupApp()
+    return r
+  }
 
 //  Issue 19700 - lifecycle callbacks
   static void verifyCallbacks()

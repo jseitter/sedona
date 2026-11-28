@@ -19,6 +19,9 @@ Cell sys_Sys_malloc(SedonaVM* vm, Cell* params)
   void* mem;
   Cell ret;
 
+  // a negative size is not a huge one
+  if (params[0].ival < 0) return nullCell;
+
   mem = (void*)malloc(num);
   if (mem != NULL) memset(mem, 0, num);
 
@@ -83,6 +86,9 @@ Cell sys_Sys_setBytes(SedonaVM* vm, Cell* params)
   size_t  off    = (size_t)params[2].ival;
   size_t  len    = (size_t)params[3].ival;
 
+  // a negative length is no bytes, not all of the address space
+  if (params[3].ival <= 0) return nullCell;
+
   bytes = bytes+off;
   memset(bytes, val, len);
   return nullCell;
@@ -95,7 +101,10 @@ Cell sys_Sys_andBytes(SedonaVM* vm, Cell* params)
   uint8_t* bytes = (uint8_t*)params[1].aval;
   size_t  off    = (size_t)params[2].ival;
   size_t  len    = (size_t)params[3].ival;
-  int i;
+  size_t  i;
+
+  // a negative length is no bytes, not all of the address space
+  if (params[3].ival <= 0) return nullCell;
 
   bytes = bytes+off;
   
@@ -123,7 +132,10 @@ Cell sys_Sys_orBytes(SedonaVM* vm, Cell* params)
   uint8_t* bytes = (uint8_t*)params[1].aval;
   size_t  off    = (size_t)params[2].ival;
   size_t  len    = (size_t)params[3].ival;
-  int i;
+  size_t  i;
+
+  // a negative length is no bytes, not all of the address space
+  if (params[3].ival <= 0) return nullCell;
 
   bytes = bytes+off;
 

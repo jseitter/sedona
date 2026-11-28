@@ -61,8 +61,57 @@ extern int isNativeIdValid(int kitId, int methodId);
 // Internal Forwards
 //////////////////////////////////////////////////////////////////////////
 
-static int vmInit(SedonaVM* vm);   
+static int vmInit(SedonaVM* vm);
 static int vmEntry(SedonaVM* vm, int methodOffset);
+static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc);
+
+//////////////////////////////////////////////////////////////////////////
+// Stack Checks
+//////////////////////////////////////////////////////////////////////////
+
+// The stack is checked in two places:
+//
+//   - whenever a frame is pushed (on entry to vmCall and by the call
+//     opcodes), that the frame and its locals fit.  This is always
+//     compiled in and is what stops a runaway recursion.
+//
+//   - with SCODE_DEBUG before every opcode, that the temporaries the
+//     opcode pushes fit.  No opcode other than a call pushes more than
+//     STACK_OPCODE_CELLS cells, so the last ones of the stack are kept
+//     free and no opcode can write past the end of the stack.
+//
+// Without SCODE_DEBUG there is no check per opcode.  The scode does not
+// say how many temporaries a method needs, so a frame is only pushed if
+// SVM_STACK_RESERVE cells are left for them above its locals.  A platform
+// can define its own value on the compiler command line.
+#define STACK_OPCODE_CELLS 2
+
+#ifndef SVM_STACK_RESERVE
+  #ifdef SCODE_DEBUG
+    #define SVM_STACK_RESERVE 0
+  #else
+    #define SVM_STACK_RESERVE 32
+  #endif
+#endif
+
+//////////////////////////////////////////////////////////////////////////
+// Image Checks
+//////////////////////////////////////////////////////////////////////////
+
+// Number of bytes in the header of an scode image, up to and including
+// the block index of the resume method (see ImageGen.java header()).
+#define SCODE_HEADER_SIZE 26
+
+/**
+ * Return if the block index is one a method can start at: the two
+ * bytes of the method header (numParams, numLocals) and its first
+ * opcode must be inside the image.
+ */
+static int isMethodInImage(SedonaVM* vm, uint16_t method)
+{
+  size_t off = (size_t)method * SCODE_BLOCK_SIZE;
+  return off >= SCODE_HEADER_SIZE && off + 3 <= vm->codeSize;
+}
 
 //////////////////////////////////////////////////////////////////////////
 // VM Entry
@@ -115,7 +164,10 @@ static int vmEntry(SedonaVM* vm, int methodOffset)
 {
   int result;
   uint16_t mainBix;
-  Cell args[2];      
+  Cell args[2];
+
+  // the block index is read from the image header
+  if (vm->codeSize < SCODE_HEADER_SIZE) return ERR_BAD_IMAGE_CODE_SIZE;
 
   // init stack pointer
   vm->sp = (Cell*)vm->stackBaseAddr;
@@ -123,6 +175,7 @@ static int vmEntry(SedonaVM* vm, int methodOffset)
 
   // lookup main block index
   mainBix = *(uint16_t*)(vm->codeBaseAddr+methodOffset);
+  if (!isMethodInImage(vm, mainBix)) return ERR_BAD_IMAGE_CODE_SIZE;
 
   // call main with list of Str[] args
   args[0].aval = (void*)vm->args;
@@ -143,6 +196,10 @@ static int vmInit(SedonaVM* vm)
 {
   uint8_t* cb = (uint8_t*)vm->codeBaseAddr;
   uint32_t u4;
+
+  // an image smaller than its header is not an image; check this
+  // first because everything below reads the header fields
+  if (cb == NULL || vm->codeSize < SCODE_HEADER_SIZE) return ERR_BAD_IMAGE_CODE_SIZE;
 
   // check magic (which also checks endian)
   u4 = *(uint32_t*)(cb+0);
@@ -206,6 +263,48 @@ static void initArray(void* base, int length, int size)
 
   for (i=0; i<length; ++i)
     refs[i] = objs + (size*i);
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Integer Division
+//////////////////////////////////////////////////////////////////////////
+
+// In C a division by zero, and the smallest integer divided by -1, are
+// undefined.  x86 raises a divide error for both, which ends the process
+// with SIGFPE; ARM carries on.  Sedona code divides by values of
+// properties anybody with access to the device can set, so the opcodes
+// use these functions, which give every CPU the result of an ARM divide
+// instruction:
+//
+//   x / 0    = 0          x % 0    = x
+//   min / -1 = min        min % -1 = 0
+
+static int32_t divInt(int32_t a, int32_t b)
+{
+  if (b == 0)  return 0;
+  if (b == -1) return (int32_t)(0u - (uint32_t)a);
+  return a / b;
+}
+
+static int32_t modInt(int32_t a, int32_t b)
+{
+  if (b == 0)  return a;
+  if (b == -1) return 0;
+  return a % b;
+}
+
+static int64_t divLong(int64_t a, int64_t b)
+{
+  if (b == 0)  return 0;
+  if (b == -1) return (int64_t)((uint64_t)0 - (uint64_t)a);
+  return a / b;
+}
+
+static int64_t modLong(int64_t a, int64_t b)
+{
+  if (b == 0)  return a;
+  if (b == -1) return 0;
+  return a % b;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -293,6 +392,15 @@ void setRef(void* self, int offset, void* val)
 
 #ifdef SCODE_DEBUG
 
+// The names come from the scode and are as long as the source wants them
+// to be (a kit, type and test method name easily add up to more than 64
+// characters), so they are cut to the size of the buffer.  snprintf of
+// Visual C++ before 2015 is called _snprintf and doesn't terminate a
+// string it had to cut, so the last byte is always set to zero.
+#if defined(_MSC_VER) && _MSC_VER < 1900
+  #define snprintf _snprintf
+#endif
+
 const char* qnameType(SedonaVM* vm, uint16_t block)
 {
   static char buf[64];
@@ -301,19 +409,21 @@ const char* qnameType(SedonaVM* vm, uint16_t block)
   const unsigned char* kitName  = block2addr(cb, pair[0]);
   const unsigned char* typeName = block2addr(cb, pair[1]);
 
-  sprintf(buf, "%s::%s", kitName, typeName);
+  snprintf(buf, sizeof(buf), "%s::%s", kitName, typeName);
+  buf[sizeof(buf)-1] = '\0';
   return buf;
 }
 
 const char* qnameSlot(SedonaVM* vm, uint16_t block)
 {
-  static char buf[64];
+  static char buf[128];
   const uint8_t* cb = vm->codeBaseAddr;
   uint16_t* pair = (uint16_t*)block2addr(cb, block);
   const char* typeName = qnameType(vm, pair[0]);
   const unsigned char* slotName = block2addr(cb, pair[1]);
 
-  sprintf(buf, "%s.%s", typeName, slotName);
+  snprintf(buf, sizeof(buf), "%s.%s", typeName, slotName);
+  buf[sizeof(buf)-1] = '\0';
   return buf;
 }
 
@@ -344,7 +454,7 @@ void dumpCallStack(SedonaVM* vm, Cell* fp)
 
 const char* opcodeToName(int opcode)
 {
-  static char temp[6];
+  static char temp[12];
 
   if (0 <= opcode && opcode < NumOpcodes)
   {
@@ -352,7 +462,8 @@ const char* opcodeToName(int opcode)
   }
   else
   {
-    sprintf(temp, "0x%x", opcode);
+    snprintf(temp, sizeof(temp), "0x%x", opcode);
+    temp[sizeof(temp)-1] = '\0';
     return temp;
   }
 }
@@ -415,6 +526,17 @@ int handleStackOverflow(SedonaVM* vm, int opcode, Cell* fp, Cell* sp)
  */
 int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
 {
+  // A native which is called from the method saves its stack pointer
+  // in the vm.  Put back the one of our caller, or a native which calls
+  // us more than once starts each call higher up the stack than the last.
+  Cell* sp = vm->sp;
+  int result = vmExec(vm, method, args, argc);
+  vm->sp = sp;
+  return result;
+}
+
+static int vmExec(SedonaVM* vm, uint16_t method, Cell* args, int argc)
+{
 #ifdef COMPUTED_GOTO
   static void* opcodeLabels[] = OpcodeLabelsArray;
 #endif
@@ -432,9 +554,13 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
   Cell cell;              // temp stack cell
   NativeMethod native;    // temp native method func pointer
   int64_t s8;             // temp signed 64-bit long      
-  Cell* maxStackAddr;     // pointer to top of stack area
+  Cell* stackLimit;       // sp must stay below this between opcodes
   NativeMethod** nativeTable;  // cached pointer to native table
                 
+  // the method to call is given as a block index, which natives
+  // read from scode and slot tables; don't run what is outside the image
+  if (!isMethodInImage(vm, method)) return ERR_INVALID_METHOD_PARAMS;
+
   // init pointers
   sp = vm->sp;
   cb = (uint8_t*)vm->codeBaseAddr;
@@ -442,13 +568,23 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
   cp = block2addr(cb, method);
   numParams = cp[0];
   numLocals = cp[1];                                     
-  maxStackAddr = (Cell*)(vm->stackBaseAddr + vm->stackMaxSize);
+  stackLimit = (Cell*)(vm->stackBaseAddr + vm->stackMaxSize) - STACK_OPCODE_CELLS;
   nativeTable = vm->nativeTable;
 
 
   // check that method has matching parameters
   // and push arguments onto the stack
   if (numParams != argc) return ERR_INVALID_METHOD_PARAMS;
+
+  // check that the arguments, the frame and the locals fit on the stack
+  if (sp == NULL || sp >= stackLimit ||
+      stackLimit - sp <= argc + 3 + numLocals + SVM_STACK_RESERVE)
+  {
+#ifdef SCODE_DEBUG
+    printf("ERROR: Stack overflow exception\n");
+#endif
+    return ERR_STACK_OVERFLOW;
+  }
   for (u2 = 0; u2 < argc; ++u2) *(++sp) = args[u2];
 
   // setup for first call to method
@@ -480,7 +616,7 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
         return handleNullPointer(vm, *cp, fp, sp);
         
       // check for stack overflow           
-      if (sp >= maxStackAddr)
+      if (sp >= stackLimit)
         return handleStackOverflow(vm, *cp, fp, sp);
         
     #endif
@@ -588,8 +724,8 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
 
       // int math
       Case IntMul:    --sp; sp->ival = sp->ival * (sp+1)->ival; ++cp; EndInstr;
-      Case IntDiv:    --sp; sp->ival = sp->ival / (sp+1)->ival; ++cp; EndInstr;
-      Case IntMod:    --sp; sp->ival = sp->ival % (sp+1)->ival; ++cp; EndInstr;
+      Case IntDiv:    --sp; sp->ival = divInt(sp->ival, (sp+1)->ival); ++cp; EndInstr;
+      Case IntMod:    --sp; sp->ival = modInt(sp->ival, (sp+1)->ival); ++cp; EndInstr;
       Case IntAdd:    --sp; sp->ival = sp->ival + (sp+1)->ival; ++cp; EndInstr;
       Case IntSub:    --sp; sp->ival = sp->ival - (sp+1)->ival; ++cp; EndInstr;
       Case IntOr:     --sp; sp->ival = sp->ival | (sp+1)->ival; ++cp; EndInstr;
@@ -616,8 +752,8 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
 
       // long math
       Case LongMul:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) * *(int64_t*)(sp+1); ++cp; EndInstr;
-      Case LongDiv:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) / *(int64_t*)(sp+1); ++cp; EndInstr;   // divdi3
-      Case LongMod:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) % *(int64_t*)(sp+1); ++cp; EndInstr;   // moddi3
+      Case LongDiv:  sp -=2; *(int64_t*)(sp-1) = divLong(*(int64_t*)(sp-1), *(int64_t*)(sp+1)); ++cp; EndInstr;   // divdi3
+      Case LongMod:  sp -=2; *(int64_t*)(sp-1) = modLong(*(int64_t*)(sp-1), *(int64_t*)(sp+1)); ++cp; EndInstr;   // moddi3
       Case LongAdd:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) + *(int64_t*)(sp+1); ++cp; EndInstr;
       Case LongSub:  sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) - *(int64_t*)(sp+1); ++cp; EndInstr;
       Case LongOr:   sp -=2; *(int64_t*)(sp-1) = *(int64_t*)(sp-1) | *(int64_t*)(sp+1); ++cp; EndInstr;
@@ -1038,7 +1174,18 @@ int vmCall(SedonaVM* vm, uint16_t method, Cell* args, int argc)
         addr = block2addr(cb, u2); // address of target method
         (++sp)->aval = cp+3;       // push return cp onto stack
         // common
-call:   (++sp)->aval = fp;         // push old frame pointer
+call:   // the return cp is pushed, check that the rest of the frame
+        // and the locals fit before writing them (cp and fp are still
+        // the ones of the calling method)
+        if (stackLimit - sp <= 2 + addr[1] + SVM_STACK_RESERVE)
+        {
+#ifdef SCODE_DEBUG
+          return handleStackOverflow(vm, *cp, fp, sp);
+#else
+          return ERR_STACK_OVERFLOW;
+#endif
+        }
+        (++sp)->aval = fp;         // push old frame pointer
         (++sp)->aval = addr;       // push new method pointer
         fp = sp-2;                 // update new frame pointer
         numParams = addr[0];       // update new num params
@@ -1064,6 +1211,14 @@ call:   (++sp)->aval = fp;         // push old frame pointer
         u2 = (u2 << 8) | *(cp+1);
 #endif        
         u2 = ((uint16_t*)addr)[u2];    // lookup method's block index
+        if (u2 == 0)                   // abstract methods have no code:
+        {                              // block 0 is the image header
+#ifdef SCODE_DEBUG
+          printf("ERROR: call of abstract method\n");
+          printf("  method: %s\n", curMethod(vm, fp));
+#endif
+          return ERR_INVALID_METHOD_PARAMS;
+        }
         addr = block2addr(cb, u2);     // address of target method
         (++sp)->aval = cp+4;           // push return cp onto stack
         goto call;                     // reuse common call implementation
@@ -1105,6 +1260,13 @@ call:   (++sp)->aval = fp;         // push old frame pointer
         EndInstr;                      // keep chugging
 
       Case CallNativeVoid:
+#ifdef SCODE_DEBUG
+        if (!isNativeIdValid(*(cp+1), *(cp+2)))
+        {
+          printf("ERROR: missing  native method %d::%d\n", *(cp+1), *(cp+2));
+          return ERR_MISSING_NATIVE;
+        }
+#endif
         native = nativeTable[*(cp+1)][*(cp+2)];  // lookup native func ptr
         u2 = *(cp+3);                  // num params in scode itself
         vm->sp = sp;                   // save stack pointer before calling out

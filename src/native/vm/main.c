@@ -254,7 +254,11 @@ static int commonVmSetup(SedonaVM* vm, const char* scodeFile)
 {
   int result;
 
-  if (vm->codeBaseAddr!=NULL) free((void*)vm->codeBaseAddr);   // Avoid memory leak
+  // Avoid memory leak; forget the old image, since
+  // loadFile leaves the pointer alone if it fails
+  if (vm->codeBaseAddr!=NULL) free((void*)vm->codeBaseAddr);
+  vm->codeBaseAddr = NULL;
+  vm->codeSize     = 0;
 
   // load scode
   result = loadFile(scodeFile, (uint8_t**)&(vm->codeBaseAddr), &(vm->codeSize));
@@ -265,6 +269,7 @@ static int commonVmSetup(SedonaVM* vm, const char* scodeFile)
   }
 
   if (vm->stackBaseAddr!=NULL) free((void*)vm->stackBaseAddr);  // Avoid memory leak
+  vm->stackBaseAddr = NULL;
 
   // alloc stack (hardcoded for now)
   // sized in cells so the stack depth is the same no matter how big
@@ -348,32 +353,43 @@ static int loadFile(const char* filename, uint8_t** paddr, size_t* psize)
 {
   size_t result;
   FILE* file;
-  size_t size;
+  long size;
   uint8_t* addr;
 
   // open file
   file = fopen(filename, "rb");
   if (file == NULL) return ERR_INPUT_FILE_NOT_FOUND;
 
-  // seek to end to get file size
-  result = fseek(file, 0, SEEK_END);
-  if (result != 0) return ERR_CANNOT_READ_INPUT_FILE;
-  size = ftell(file);
+  // seek to end to get file size; ftell returns -1 if it cannot
+  // tell, which must not be taken as the number of bytes to read
+  if (fseek(file, 0, SEEK_END) != 0 || (size = ftell(file)) < 0)
+  {
+    fclose(file);
+    return ERR_CANNOT_READ_INPUT_FILE;
+  }
   rewind(file);
 
-  // allocate memory for image
-  addr = (uint8_t*)malloc(size);
+  // allocate memory for image (never zero bytes, for which malloc
+  // may return NULL: an empty file is reported as a bad image)
+  addr = (uint8_t*)malloc(size > 0 ? (size_t)size : 1);
   if (addr == NULL)
+  {
+    fclose(file);
     return ERR_MALLOC_IMAGE;
+  }
 
   // read file into memory
-  result = fread(addr, 1, size, file);
-  if (result != size) return ERR_CANNOT_READ_INPUT_FILE;
+  result = fread(addr, 1, (size_t)size, file);
+  fclose(file);
+  if (result != (size_t)size)
+  {
+    free(addr);
+    return ERR_CANNOT_READ_INPUT_FILE;
+  }
 
   // success
   *paddr = addr;
-  *psize = size;
-  fclose(file);
+  *psize = (size_t)size;
   return 0;
 }
 
@@ -392,6 +408,7 @@ static void checkStaged(const char* filename)
 
   len = strlen(filename);
   stageName = (char*)malloc(len + strlen(".stage") + 1);
+  if (stageName == NULL) return;
   strcpy(stageName, filename);
   strcat(stageName, ".stage");
   if ((file = fopen(stageName, "rb")) != NULL)

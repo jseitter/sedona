@@ -13,8 +13,23 @@
 // String Formating
 //////////////////////////////////////////////////////////////////////////
 
-// shared buffer
-static char strbuf[32];
+// Shared buffer.  "%f" prints every digit in front of the decimal
+// point: 39 of them for the biggest float and 309 for the biggest double.
+// With the sign, the point, six decimals and the terminator that is 318
+// bytes, so 32 are enough for the integers but not for these.
+static char strbuf[320];
+
+// snprintf of Visual C++ before 2015 is called _snprintf and doesn't
+// terminate a string it had to cut: FORMAT always sets the last byte.
+#if defined(_MSC_VER) && _MSC_VER < 1900
+  #define snprintf _snprintf
+#endif
+
+#define FORMAT(fmt, val)                              \
+  do {                                                \
+    snprintf(strbuf, sizeof(strbuf), fmt, val);       \
+    strbuf[sizeof(strbuf)-1] = '\0';                  \
+  } while (0)
 
 // Str Sys.intStr(int)
 Cell sys_Sys_intStr(SedonaVM* vm, Cell* params)
@@ -22,7 +37,7 @@ Cell sys_Sys_intStr(SedonaVM* vm, Cell* params)
   int32_t i = params[0].ival;
   Cell result;
 
-  sprintf(strbuf, "%d", i);
+  FORMAT("%d", i);
 
   result.aval = strbuf;
   return result;
@@ -34,7 +49,7 @@ Cell sys_Sys_hexStr(SedonaVM* vm, Cell* params)
   int32_t i = params[0].ival;
   Cell result;
 
-  sprintf(strbuf, "%x", i);
+  FORMAT("%x", i);
 
   result.aval = strbuf;
   return result;
@@ -47,9 +62,9 @@ Cell sys_Sys_longStr(SedonaVM* vm, Cell* params)
   Cell result;
 
 #ifdef _WIN32
-  sprintf(strbuf, "%I64d", i);
+  FORMAT("%I64d", i);
 #else
-  sprintf(strbuf, "%lld", i);
+  FORMAT("%lld", i);
 #endif
 
   result.aval = strbuf;
@@ -63,9 +78,9 @@ Cell sys_Sys_longHexStr(SedonaVM* vm, Cell* params)
   Cell result;
 
 #ifdef _WIN32
-  sprintf(strbuf, "%I64x", i);
+  FORMAT("%I64x", i);
 #else
-  sprintf(strbuf, "%llx", i);
+  FORMAT("%llx", i);
 #endif
 
   result.aval = strbuf;
@@ -78,7 +93,7 @@ Cell sys_Sys_floatStr(SedonaVM* vm, Cell* params)
   float f = params[0].fval;
   Cell result;
 
-  sprintf(strbuf, "%f", f);
+  FORMAT("%f", f);
 
   result.aval = strbuf;
   return result;
@@ -90,7 +105,7 @@ Cell sys_Sys_doubleStr(SedonaVM* vm, Cell* params)
   double d = *(double*)params;
   Cell result;      
 
-  sprintf(strbuf, "%lf", d);
+  FORMAT("%lf", d);
 
   result.aval = strbuf;
   return result;
