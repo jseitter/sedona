@@ -10,8 +10,8 @@ package sedona.sox;
 
 import java.io.IOException;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import sedona.Env;
 import sedona.sox.ISoxComm.TransferListener;
@@ -124,9 +124,8 @@ public class FileTransfer
 
       synchronized (lock)
       {
-        while (!chunkQueue.isEmpty())
+        while ((msg = (Msg)chunkQueue.poll()) != null)
         {
-          msg = (Msg)chunkQueue.remove(0);
           int cmd           = msg.u1();
           int replyNum      = msg.u1();
           int chunkNum      = msg.u2();
@@ -403,6 +402,10 @@ public class FileTransfer
   boolean closeReceived;  // have we received closed command (put only)
   Object lock;            // b/w caller and Receiver
   volatile boolean opened;
-  final LinkedList chunkQueue = new LinkedList();
+  // Filled by the SoxReceiver thread without holding 'lock' (start() holds
+  // 'lock' while waiting on the 'F' response, so chunks that arrive early must
+  // not block on it), drained under 'lock' by both threads; so it must be
+  // thread-safe on its own.
+  final ConcurrentLinkedQueue chunkQueue = new ConcurrentLinkedQueue();
 }
 
